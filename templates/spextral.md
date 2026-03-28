@@ -47,6 +47,14 @@ Quick start: type `SDD_WAKE` (case-insensitive) in your AI chat.
 
 Many platforms (Copilot, web chats) don't proactively scan the project. The user activates the system by typing `SDD_WAKE`, `SDD_WAKE()`, `sdd_wake`, or any case-insensitive variant.
 
+The agent must also recognize **natural-language equivalents** as implicit `SDD_WAKE` triggers. Examples include (but are not limited to):
+- "nueva feature", "new feature", "empiezo feature nueva"
+- "quiero añadir...", "I want to add..."
+- "nuevo desarrollo", "let's build..."
+- "siguiente tarea", "next task"
+
+When any of these are detected and a `.sdd/` folder exists, the agent MUST execute the full `SDD_WAKE` discovery protocol before proceeding, ensuring the SDD workflow is always active.
+
 On receiving this command:
 
 1. Find the `.sdd/` folder (or the path defined in `SDD_ROOT`).
