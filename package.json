@@ -1,0 +1,28 @@
+{
+  "name": "spextral",
+  "version": "2.0.0",
+  "description": "Spec-Driven Development protocol for AI agents. One command to govern them all.",
+  "license": "MIT",
+  "bin": {
+    "spextral": "bin/spextral.js"
+  },
+  "files": [
+    "bin/",
+    "templates/"
+  ],
+  "keywords": [
+    "sdd",
+    "spec-driven-development",
+    "ai-agents",
+    "claude",
+    "cursor",
+    "copilot",
+    "protocol",
+    "markdown"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AmOrFeU86/spextral.git"
+  },
+  "homepage": "https://github.com/AmOrFeU86/spextral#readme"
+}
