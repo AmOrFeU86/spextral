@@ -166,7 +166,9 @@ draft → ready → validated → blocking_review → validated → archived
 ├── sdd-{slug}-PROGRESS.md
 ├── sdd-{slug}-VALIDATION.md
 ├── sdd-{slug}-CHECKPOINT-{id}.md
-└── sdd-{slug}-REVIEW.md
+├── sdd-{slug}-REVIEW.md
+├── sdd-{slug}-TEST.md
+└── sdd-{slug}-SECURITY.md
 ```
 
 ---
@@ -309,6 +311,97 @@ This guarantees the fingerprint is identical regardless of operating system, and
   6. Show diff or summary to the user.
   7. Update `sdd-{slug}-PROGRESS.md`.
 
+### sddkit-test (Unit Testing)
+
+- **Required Capabilities:** `FileWrite`, `FileRead`, `CommandExec`
+- **Trigger:** Runs automatically after `sddkit-implement` completes all tasks, or manually via `SDD_TEST`.
+- **Protocol:**
+  1. Read `sdd-{slug}-SPEC.md` and `sdd-{slug}-PROGRESS.md` to understand requirements and implemented tasks.
+  2. **Detect project language and test framework:**
+     - Python → `pytest`
+     - JavaScript/TypeScript → `vitest` or `jest` (prefer vitest)
+     - Go → `go test`
+     - Rust → `cargo test`
+     - If unclear, ask the user.
+  3. **Generate unit tests** for each implemented task:
+     - One test file per source module (e.g. `test_main.py` for `main.py`).
+     - Cover: happy path, edge cases, and error handling per requirement in SPEC.
+     - Minimum: one test per REQ in the SPEC.
+  4. **Execute tests** and capture results.
+  5. **Generate `sdd-{slug}-TEST.md`** with:
+     - Test matrix: requirement → test → pass/fail
+     - Coverage summary (if tool available)
+     - Failed tests with error output
+  6. If all tests pass → status `validated`. If any fail → status `blocking_review` with failure details.
+
+```yaml
+# TEST.md frontmatter
+---
+sdd_version: "2.0.0"
+project_slug: "{slug}"
+artifact_type: "TEST"
+timestamp: "2026-01-15T10:30:00Z"
+status: "validated"
+generated_by: "sddkit-test"
+fingerprint: "{slug}:TEST:{date}:chars_{count}"
+previous_artifact: "sdd-{slug}-PROGRESS.md"
+next_artifact: "sdd-{slug}-SECURITY.md"
+test_summary:
+  total: 5
+  passed: 5
+  failed: 0
+  coverage: "87%"
+---
+```
+
+> **Note:** If `CommandExec` is not available (e.g. Cursor), the agent generates the test files but skips execution, marking the TEST artifact as `draft` with a note to run manually.
+
+### sddkit-security (Security Audit)
+
+- **Required Capabilities:** `FileRead`
+- **Trigger:** Runs after `sddkit-test` (if available) or after `sddkit-implement`, or manually via `SDD_SECURITY`.
+- **Protocol:**
+  1. Read all source files referenced in `sdd-{slug}-PROGRESS.md`.
+  2. **Static Analysis** — Scan for:
+     - **Secrets & Credentials:** Hardcoded API keys, tokens, passwords, connection strings. Patterns: high-entropy strings, common variable names (`secret`, `password`, `api_key`, `token`).
+     - **Injection Vulnerabilities:** SQL injection, command injection, XSS, path traversal. Check for unsanitized user inputs in queries, shell commands, HTML output, and file paths.
+     - **Authentication & Authorization:** Missing auth checks, weak session handling, insecure token storage.
+     - **Dependency Risks:** Known vulnerable packages (check against version if `CommandExec` available), overly permissive dependencies.
+     - **Data Exposure:** Sensitive data in logs, verbose error messages, debug mode in production config.
+     - **Configuration:** Insecure defaults (DEBUG=true, CORS=*, permissive file permissions).
+  3. **Classify findings by severity:**
+     - **Critical:** Exploitable vulnerabilities (injection, hardcoded secrets, auth bypass). Blocks deployment.
+     - **High:** Likely exploitable with effort (weak crypto, missing rate limiting). Should fix before production.
+     - **Medium:** Best-practice violations (missing input validation, verbose errors). Fix when possible.
+     - **Low:** Informational (outdated patterns, missing security headers). Nice to have.
+  4. **Generate `sdd-{slug}-SECURITY.md`** with:
+     - Summary table: severity → count
+     - Detailed findings: file, line, description, remediation
+     - OWASP category mapping where applicable
+  5. If any **Critical** finding → status `blocking_review`. Otherwise → status `validated` with warnings listed.
+
+```yaml
+# SECURITY.md frontmatter
+---
+sdd_version: "2.0.0"
+project_slug: "{slug}"
+artifact_type: "SECURITY"
+timestamp: "2026-01-15T10:30:00Z"
+status: "validated"
+generated_by: "sddkit-security"
+fingerprint: "{slug}:SECURITY:{date}:chars_{count}"
+previous_artifact: "sdd-{slug}-TEST.md"
+next_artifact: null
+security_summary:
+  critical: 0
+  high: 1
+  medium: 2
+  low: 3
+---
+```
+
+> **Note:** This is a best-effort static analysis by the AI agent, not a replacement for dedicated security tools (SAST/DAST). For production systems, complement with tools like `semgrep`, `bandit` (Python), `npm audit` (Node.js), or `gosec` (Go).
+
 ### sddkit-archive (Automatic Pruning)
 
 - **Required Capabilities:** `FileWrite`, `FileRead`
@@ -438,11 +531,19 @@ Practical case: "REST API":
 7. The human responds `SDD_APPROVE`.
 8. While implementing *T2.1*, the diff exceeds 50 lines → E601 → automatic checkpoint → `blocking_review` (because `autonomy_level: moderate`).
 9. The human responds `SDD_APPROVE`. The AI continues.
-10. Upon finishing, `sddkit-archive` moves validated artifacts to `.sdd/archive/`.
+10. Upon finishing implementation, `sddkit-test` auto-generates unit tests for each module, runs them, and produces `sdd-restapi-TEST.md`. All 12 tests pass → `validated`.
+11. `sddkit-security` scans the codebase: finds a hardcoded DB password (Critical) and missing rate limiting (High) → `blocking_review`. The human fixes the password, responds `SDD_APPROVE`.
+12. `sddkit-archive` moves validated artifacts to `.sdd/archive/`.
 
 ---
 
 ## CHANGELOG
+
+### v2.1.0
+- Adds `sddkit-test` (automatic unit testing post-implementation)
+- Adds `sddkit-security` (security audit with OWASP mapping)
+- New artifacts: TEST.md, SECURITY.md
+- Updated flow: IMPLEMENT → TEST → SECURITY → archive
 
 ### v2.0.0
 - Adds `sddkit-checkpoint`, `sddkit-review`, `sddkit-repair`
