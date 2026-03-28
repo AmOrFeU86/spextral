@@ -9,7 +9,7 @@ Framework SDD agnostico basado en instrucciones portables con artefactos version
 ### Philosophy
 
 1. **Todo es una Instruction:** Sin dependencias de codigo, solo logica en Markdown.
-2. **Contratos Inmutables:** Los artefactos (`sdd-{slug}-{TYPE}.md`) son la base de la verdad.
+2. **Contratos Inmutables:** Los artefactos (`{slug}/{TYPE}.md`) son la base de la verdad.
 3. **Zero Lock-in:** Funciona en cualquier IDE o chat.
 4. **Eficiencia de Tokens (Lazy Loading + Archiving):** La IA solo lee el artefacto actual y sus vecinos inmediatos. Artefactos antiguos se archivan automaticamente.
 5. **Validacion Ligera:** Fingerprints normalizados para verificacion portable en cualquier entorno y SO.
@@ -157,27 +157,34 @@ draft → ready → validated → blocking_review → validated → archived
 | `archived` | Moved to `.sdd/archive/`. Only accessible via index. |
 
 > **Artifact Immutability Rule vs. Tasks:**
-> The states in the machine above apply **exclusively at the file/artifact level**. Once static artifacts like `sdd-{slug}-SPEC.md` or `sdd-{slug}-PLAN.md` reach `validated` status, **they are frozen immutably**.
-> During `sddkit-implement` execution, code progress must NOT alter the states or contents of the SPEC or PLAN (to avoid constantly invalidating their fingerprints). All execution state updates (`pending`, `in_progress`, `done`) must occur **strictly within `sdd-{slug}-PROGRESS.md`**.
+> The states in the machine above apply **exclusively at the file/artifact level**. Once static artifacts like `{slug}/SPEC.md` or `{slug}/PLAN.md` reach `validated` status, **they are frozen immutably**.
+> During `sddkit-implement` execution, code progress must NOT alter the states or contents of the SPEC or PLAN (to avoid constantly invalidating their fingerprints). All execution state updates (`pending`, `in_progress`, `done`) must occur **strictly within `{slug}/PROGRESS.md`**.
 
 ---
 
 ## 4. Artifact Directory Structure
 
+Artifacts are organized in subdirectories per feature slug:
+
 ```
 .sdd/
 ├── archive/                      # Archived artifacts (>7 days or >2 hops)
-│   └── sdd-INDEX.md              # Index of archived artifacts with fingerprints
-├── sdd-{slug}-CONTEXT.md
-├── sdd-{slug}-SPEC.md
-├── sdd-{slug}-PLAN.md
-├── sdd-{slug}-PROGRESS.md
-├── sdd-{slug}-VALIDATION.md
-├── sdd-{slug}-CHECKPOINT-{id}.md
-├── sdd-{slug}-REVIEW.md
-├── sdd-{slug}-TEST.md
-└── sdd-{slug}-SECURITY.md
+│   └── INDEX.md                  # Index of archived artifacts with fingerprints
+├── {slug}/
+│   ├── CONTEXT.md
+│   ├── SPEC.md
+│   ├── PLAN.md
+│   ├── PROGRESS.md
+│   ├── VALIDATION.md
+│   ├── CHECKPOINT-{id}.md
+│   ├── REVIEW.md
+│   ├── TEST.md
+│   └── SECURITY.md
+└── {another-slug}/
+    └── ...
 ```
+
+Each slug gets its own folder under `.sdd/`. This keeps features isolated and the directory clean. Artifact references in frontmatter use relative paths within the slug folder (e.g. `previous_artifact: "CONTEXT.md"`, `next_artifact: "PLAN.md"`).
 
 ---
 
@@ -188,7 +195,7 @@ draft → ready → validated → blocking_review → validated → archived
 - **Required Capabilities:** `FileWrite`
 - **Initialization Protocol:**
   1. Create `.sdd/` and `.sdd/archive/` structure.
-  2. Generate seed artifacts: `sdd-{slug}-CONTEXT.md` (empty template).
+  2. Generate seed artifacts: `{slug}/CONTEXT.md` (empty template).
   3. **Create exclusion rules for IDEs** that auto-vectorize:
      - `.cursorignore`: add `.sdd/archive/**`
      - `.copilotignore`: add `.sdd/archive/**`
@@ -214,8 +221,8 @@ generated_by: "sddkit-spec"
 ---
 # ... required fields ...
 fingerprint: "myapp:SPEC:2024-01-15:chars_2450"  # Non-blank char count of body
-previous_artifact: "sdd-myapp-CONTEXT.md"
-next_artifact: "sdd-myapp-PLAN.md"
+previous_artifact: "CONTEXT.md"
+next_artifact: "PLAN.md"
 session_id: "uuid-v4"
 depends_on: []        # For tasks in PLAN
 claimed_by: null      # format: "{session_id}::{timestamp_unix}" or null
@@ -253,7 +260,7 @@ This guarantees the fingerprint is identical regardless of operating system, and
   1. **Structural Validation:** Verify YAML syntax strictly. Verify that `status` is one of the valid states defined in the state machine.
   2. **Existence Validation (E602):** Check that `previous_artifact` and `next_artifact` exist physically on disk (search both `.sdd/` and `.sdd/archive/`). Emit error E602 if not.
   3. **Fingerprint Validation:** Extract post-frontmatter body, normalize to LF, count non-blank characters, and compare against stored fingerprint. If discrepancy, set `status: fingerprint_mismatch`.
-  4. Emit the report `.sdd/sdd-{slug}-VALIDATION.md`.
+  4. Emit the report `.sdd/{slug}/VALIDATION.md`.
 
 ### sddkit-checkpoint
 
@@ -261,7 +268,7 @@ This guarantees the fingerprint is identical regardless of operating system, and
 - **Creation Protocol:**
   1. Capture snapshot of current state of all artifacts.
   2. List code files modified since the last checkpoint.
-  3. Generate `sdd-{slug}-CHECKPOINT-{timestamp}.md`.
+  3. Generate `{slug}/CHECKPOINT-{timestamp}.md`.
   4. Update references in active artifacts.
 - **Retention Policy:** Keep maximum 5 checkpoints per session. The oldest is automatically deleted.
 
@@ -293,12 +300,12 @@ This guarantees the fingerprint is identical regardless of operating system, and
 
 - **Required Capabilities:** `FileRead`, `YAMLParse`
 - **Review Protocol:**
-  1. Load `sdd-{slug}-SPEC.md` and `sdd-{slug}-PLAN.md`.
+  1. Load `{slug}/SPEC.md` and `{slug}/PLAN.md`.
   2. **Contradiction Analysis:** Identify discrepancies between specification and plan.
   3. **Task Coverage:** Verify that each SPEC requirement has associated tasks.
   4. **Edge Cases:** List unconsidered scenarios.
   5. **Dependency Graph:** To validate cycles, the AI MUST write the **Topological Sort** (linear ordering) of all tasks. If linear ordering is impossible, emit E603 indicating the tasks involved in the cycle.
-  6. Generate `sdd-{slug}-REVIEW.md` with findings classified by severity (blocking / warning / informational).
+  6. Generate `{slug}/REVIEW.md` with findings classified by severity (blocking / warning / informational).
 
 ### sddkit-implement (With Configurable Autonomy)
 
@@ -306,7 +313,7 @@ This guarantees the fingerprint is identical regardless of operating system, and
 - **Enhanced Atomic Execution Protocol:**
   1. Read autonomy configuration (`batch_size`, `review_frequency`, `autonomy_level`).
   2. Identify `pending` tasks respecting `depends_on` (dependency graph).
-  3. **Task Reservation (Subagents and Tie-breaking):** Before executing a task, verify that `claimed_by` in `sdd-{slug}-PROGRESS.md` is empty (`null`) or matches the current `session_id`.
+  3. **Task Reservation (Subagents and Tie-breaking):** Before executing a task, verify that `claimed_by` in `{slug}/PROGRESS.md` is empty (`null`) or matches the current `session_id`.
      - To take a task, write: `claimed_by: "{session_id}::{timestamp_unix}"`.
      - **Deterministic verification:** After writing, re-read the file ~1 second later. If another subagent also claimed the task simultaneously, the one with the **oldest (lowest) `timestamp_unix`** wins. The losing subagent must rollback its claim and find the next `pending` task.
   4. **Execute according to `review_frequency`:**
@@ -317,14 +324,14 @@ This guarantees the fingerprint is identical regardless of operating system, and
      - `full`: Generates checkpoint and **continues** automatically.
      - `moderate` or `strict`: Generates checkpoint and switches to `blocking_review`. The human decides if the massive refactoring is desired.
   6. Show diff or summary to the user.
-  7. Update `sdd-{slug}-PROGRESS.md`.
+  7. Update `{slug}/PROGRESS.md`.
 
 ### sddkit-test (Unit Testing)
 
 - **Required Capabilities:** `FileWrite`, `FileRead`, `CommandExec`
 - **Trigger:** Runs automatically after `sddkit-implement` completes all tasks, or manually via `SDD_TEST`.
 - **Protocol:**
-  1. Read `sdd-{slug}-SPEC.md` and `sdd-{slug}-PROGRESS.md` to understand requirements and implemented tasks.
+  1. Read `{slug}/SPEC.md` and `{slug}/PROGRESS.md` to understand requirements and implemented tasks.
   2. **Detect project language and test framework:**
      - Python → `pytest`
      - JavaScript/TypeScript → `vitest` or `jest` (prefer vitest)
@@ -336,7 +343,7 @@ This guarantees the fingerprint is identical regardless of operating system, and
      - Cover: happy path, edge cases, and error handling per requirement in SPEC.
      - Minimum: one test per REQ in the SPEC.
   4. **Execute tests** and capture results.
-  5. **Generate `sdd-{slug}-TEST.md`** with:
+  5. **Generate `{slug}/TEST.md`** with:
      - Test matrix: requirement → test → pass/fail
      - Coverage summary (if tool available)
      - Failed tests with error output
@@ -352,8 +359,8 @@ timestamp: "2026-01-15T10:30:00Z"
 status: "validated"
 generated_by: "sddkit-test"
 fingerprint: "{slug}:TEST:{date}:chars_{count}"
-previous_artifact: "sdd-{slug}-PROGRESS.md"
-next_artifact: "sdd-{slug}-SECURITY.md"
+previous_artifact: "{slug}/PROGRESS.md"
+next_artifact: "{slug}/SECURITY.md"
 test_summary:
   total: 5
   passed: 5
@@ -369,7 +376,7 @@ test_summary:
 - **Required Capabilities:** `FileRead`
 - **Trigger:** Runs after `sddkit-test` (if available) or after `sddkit-implement`, or manually via `SDD_SECURITY`.
 - **Protocol:**
-  1. Read all source files referenced in `sdd-{slug}-PROGRESS.md`.
+  1. Read all source files referenced in `{slug}/PROGRESS.md`.
   2. **Static Analysis** — Scan for:
      - **Secrets & Credentials:** Hardcoded API keys, tokens, passwords, connection strings. Patterns: high-entropy strings, common variable names (`secret`, `password`, `api_key`, `token`).
      - **Injection Vulnerabilities:** SQL injection, command injection, XSS, path traversal. Check for unsanitized user inputs in queries, shell commands, HTML output, and file paths.
@@ -382,7 +389,7 @@ test_summary:
      - **High:** Likely exploitable with effort (weak crypto, missing rate limiting). Should fix before production.
      - **Medium:** Best-practice violations (missing input validation, verbose errors). Fix when possible.
      - **Low:** Informational (outdated patterns, missing security headers). Nice to have.
-  4. **Generate `sdd-{slug}-SECURITY.md`** with:
+  4. **Generate `{slug}/SECURITY.md`** with:
      - Summary table: severity → count
      - Detailed findings: file, line, description, remediation
      - OWASP category mapping where applicable
@@ -398,7 +405,7 @@ timestamp: "2026-01-15T10:30:00Z"
 status: "validated"
 generated_by: "sddkit-security"
 fingerprint: "{slug}:SECURITY:{date}:chars_{count}"
-previous_artifact: "sdd-{slug}-TEST.md"
+previous_artifact: "{slug}/TEST.md"
 next_artifact: null
 security_summary:
   critical: 0
@@ -418,7 +425,7 @@ security_summary:
   - Distance >2 hops from active artifact OR age >7 days.
 - **Protocol:**
   1. Move eligible artifacts to `.sdd/archive/`.
-  2. Update `sdd-INDEX.md` with fingerprints of archived files.
+  2. Update `INDEX.md` with fingerprints of archived files.
   3. Maintain links in `previous_artifact`/`next_artifact` for traceability.
 
 ---
@@ -461,7 +468,7 @@ This maintains full traceability without wasting tokens on already-finished task
 ## 8. Autonomy Configuration
 
 ```yaml
-# Example configuration in sdd-{slug}-PLAN.md
+# Example configuration in {slug}/PLAN.md
 autonomy_config:
   batch_size: 5              # Max tasks before mandatory pause
   review_frequency: "per_module"  # per_task | per_module | end_only
@@ -515,12 +522,12 @@ In environments supporting subagents (like Claude Code), multiple instances can 
 
 ### Accessing Archived Knowledge
 
-Since `.cursorignore` and `.copilotignore` exclude `.sdd/archive/` from automatic indexing, the Agent won't have context of old artifacts by default. If the user makes an explicit historical query (e.g. "what did we decide about authentication 3 weeks ago?"), the Agent MUST first consult `sdd-INDEX.md` (located in `.sdd/archive/`, but always accessible via `FileRead`) to locate the specific artifact and load it on demand. This preserves lazy loading without sacrificing traceability.
+Since `.cursorignore` and `.copilotignore` exclude `.sdd/archive/` from automatic indexing, the Agent won't have context of old artifacts by default. If the user makes an explicit historical query (e.g. "what did we decide about authentication 3 weeks ago?"), the Agent MUST first consult `INDEX.md` (located in `.sdd/archive/`, but always accessible via `FileRead`) to locate the specific artifact and load it on demand. This preserves lazy loading without sacrificing traceability.
 
 ```bash
 # Manual fingerprint validation script (optional)
 # macOS/Linux — count non-blank characters of the body
-sed '/^---$/,/^---$/d' sdd-myapp-SPEC.md | tr -d '[:space:]' | wc -c
+sed '/^---$/,/^---$/d' .sdd/myapp/SPEC.md | tr -d '[:space:]' | wc -c
 # Compare the result with the chars_nnn field in the fingerprint
 ```
 
@@ -539,7 +546,7 @@ Practical case: "REST API":
 7. The human responds `SDD_APPROVE`.
 8. While implementing *T2.1*, the diff exceeds 50 lines → E601 → automatic checkpoint → `blocking_review` (because `autonomy_level: moderate`).
 9. The human responds `SDD_APPROVE`. The AI continues.
-10. Upon finishing implementation, `sddkit-test` auto-generates unit tests for each module, runs them, and produces `sdd-restapi-TEST.md`. All 12 tests pass → `validated`.
+10. Upon finishing implementation, `sddkit-test` auto-generates unit tests for each module, runs them, and produces `restapi/TEST.md`. All 12 tests pass → `validated`.
 11. `sddkit-security` scans the codebase: finds a hardcoded DB password (Critical) and missing rate limiting (High) → `blocking_review`. The human fixes the password, responds `SDD_APPROVE`.
 12. `sddkit-archive` moves validated artifacts to `.sdd/archive/`.
 
