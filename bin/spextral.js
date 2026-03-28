@@ -127,10 +127,19 @@ async function cmdInit() {
   ensureDir(path.join(".sdd", "archive"));
   console.log("  Created .sdd/ and .sdd/archive/");
 
-  // Create IDE exclusion files
-  appendIfMissing(".cursorignore", ".sdd/archive/**");
-  appendIfMissing(".copilotignore", ".sdd/archive/**");
-  console.log("  Updated .cursorignore and .copilotignore");
+  // Create IDE exclusion files (only for relevant IDEs)
+  const exclusions = [];
+  if (ideKey === "cursor") {
+    appendIfMissing(".cursorignore", ".sdd/archive/**");
+    exclusions.push(".cursorignore");
+  }
+  if (ideKey === "copilot") {
+    appendIfMissing(".copilotignore", ".sdd/archive/**");
+    exclusions.push(".copilotignore");
+  }
+  if (exclusions.length > 0) {
+    console.log(`  Updated ${exclusions.join(" and ")}`);
+  }
 
   console.log(`\n  Done! Spextral initialized for ${ide.name}.`);
   console.log('  Type SDD_WAKE in your AI chat to get started.\n');
