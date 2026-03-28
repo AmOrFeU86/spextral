@@ -22,7 +22,8 @@ const VALID_STATES = [
 const IDE_TARGETS = {
   "claude-code": {
     name: "Claude Code",
-    dest: path.join(".claude", "skills", SPEC_FILENAME),
+    dest: "CLAUDE.md",
+    isFile: true,
   },
   cursor: {
     name: "Cursor",
