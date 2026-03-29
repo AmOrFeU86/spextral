@@ -467,7 +467,7 @@ async function askArtifacts() {
     lines.push("");
     lines.push(`  ${c.title}Spextral — Spec-Driven Development Protocol${c.reset}`);
     lines.push("");
-    lines.push("  Seleciona los archivos SDD para inicializar:");
+    lines.push("  Select SDD artifacts to initialize:");
     lines.push("");
     SDD_ARTIFACTS.forEach((a, i) => {
       const isSelected = selected.has(a.name);
