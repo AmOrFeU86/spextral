@@ -145,7 +145,7 @@ When the agent emits `blocking_review`, the human responds with one of these com
 | `SDD_REJECT` | Rejects the block. The agent reverts to the last checkpoint and awaits instructions. |
 | `SDD_SKIP {task_id}` | Skips the indicated task and continues with the next available one. |
 
-> **Note:** The agent must also accept natural-language responses (e.g. "ok, continue", "proceed") as equivalents to `SDD_APPROVE`, but formal commands are preferred for traceability.
+> **Note:** The agent must accept natural-language approval responses (e.g. "sí", "ok", "procede", "continue", "approved", "go ahead") as equivalents to `SDD_APPROVE`. When requesting approval, phrase questions naturally — never require the user to type exact commands like `SDD_APPROVE`.
 
 ### Artifact State Machine
 
@@ -162,7 +162,7 @@ draft → clarify → ready → validated → blocking_review → validated → 
 | Status | Meaning / Action |
 |--------|-----------------|
 | `draft` | In development. Requires confirmation. |
-| `clarify` | **Adversarial Review**: The Agent executes an internal review searching for ambiguities, missing edge cases, and contradictions. It proposes clarification questions to the human. Transition to `ready` occurs **exclusively** when the human responds and emits `SDD_APPROVE`. |
+| `clarify` | **Adversarial Review**: The Agent executes an internal review searching for ambiguities, missing edge cases, and contradictions. It proposes clarification questions to the human. Transition to `ready` occurs when the human approves (natural language accepted). |
 | `ready` | Complete. `sddkit-validate` must run. |
 | `validated` | Verified. Subsequent features may proceed. |
 | `blocking_review` | **Configurable Pause**: The Agent stops according to `review_frequency`. Awaits human command. |
@@ -175,7 +175,7 @@ draft → clarify → ready → validated → blocking_review → validated → 
 > 2. Check for contradictions between stated requirements.
 > 3. List missing edge cases or error scenarios.
 > 4. Present all findings as numbered questions to the human.
-> 5. Wait for `SDD_APPROVE` (or `SDD_MODIFY`) before transitioning to `ready`.
+> 5. Wait for approval (natural language like "sí", "ok" is fine; or formal commands like `SDD_APPROVE`) before transitioning to `ready`.
 > This ensures no artifact reaches implementation with unresolved ambiguities.
 
 > **Artifact Immutability Rule vs. Tasks:**

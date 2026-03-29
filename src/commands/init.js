@@ -1,0 +1,134 @@
+const fs = require("fs");
+const path = require("path");
+const { TEMPLATES_DIR, SPEC_SOURCE, AGENT_REGISTRY, SDD_SKILLS } = require("../constants");
+const { ensureDir, appendIfMissing, ask } = require("../utils");
+const { interactiveCheckbox } = require("../ui/checkbox");
+const { askArtifacts } = require("../ui/artifact-picker");
+
+function wrapMdc(content) {
+  return `---
+description: Spextral SDD Protocol
+globs:
+alwaysApply: true
+---
+
+${content}`;
+}
+
+function wrapKiroSteering(content) {
+  return `---
+inclusion: always
+---
+
+${content}`;
+}
+
+function generateNativeSkills(agent) {
+  if (!agent.skills) return;
+
+  for (const [name, skill] of Object.entries(SDD_SKILLS)) {
+    const skillDir = path.join(agent.skills.dir, name);
+    const skillPath = path.join(skillDir, "SKILL.md");
+    ensureDir(skillDir);
+    fs.writeFileSync(
+      skillPath,
+      `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${skill.prompt}\n`
+    );
+    console.log(`    Skill: ${skillPath}`);
+  }
+}
+
+async function cmdInit() {
+  console.log("\n  Spextral — Spec-Driven Development Protocol");
+
+  const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
+  const platformItems = choices.map(([key, val]) => ({
+    key,
+    label: val.name,
+    verified: val.verified || false,
+  }));
+
+  const selectedKeys = await interactiveCheckbox({
+    title: "Select agent platform(s):",
+    items: platformItems,
+    preselected: new Set(),
+    hint: "\u2191/\u2193: navigate | Space: toggle | Enter: confirm",
+  });
+
+  if (selectedKeys.length === 0) {
+    console.error("  No agents selected. Aborting.");
+    process.exit(1);
+  }
+
+  const selected = selectedKeys.map((key) => [key, AGENT_REGISTRY[key]]);
+
+  const specContent = fs.readFileSync(SPEC_SOURCE, "utf-8");
+  const writtenDests = new Set();
+
+  for (const [agentKey, agent] of selected) {
+    console.log(`\n  [${agent.name}]`);
+
+    if (agent.dest && !writtenDests.has(agent.dest)) {
+      writtenDests.add(agent.dest);
+      const destPath = path.resolve(agent.dest);
+      let content = specContent;
+      if (agent.mdcFormat) content = wrapMdc(specContent);
+      else if (agent.kiroSteering) content = wrapKiroSteering(specContent);
+
+      ensureDir(path.dirname(destPath));
+      if (agent.isFile && fs.existsSync(destPath)) {
+        const existing = fs.readFileSync(destPath, "utf-8");
+        if (!existing.includes("sdd_version")) {
+          fs.writeFileSync(destPath, existing + "\n\n" + content);
+          console.log(`    Appended to ${agent.dest}`);
+        } else {
+          fs.writeFileSync(destPath, content);
+          console.log(`    Updated ${agent.dest}`);
+        }
+      } else {
+        fs.writeFileSync(destPath, content);
+        console.log(`    Created ${agent.dest}`);
+      }
+    } else if (!agent.dest) {
+      console.log("    Manual mode — spec available at templates/spextral.md in the package.");
+    }
+
+    if (agent.exclusionFile) {
+      appendIfMissing(agent.exclusionFile, ".sdd/archive/**");
+      console.log(`    Updated ${agent.exclusionFile}`);
+    }
+
+    generateNativeSkills(agent);
+  }
+
+  const { chain, customArtifacts } = await askArtifacts();
+
+  ensureDir(path.join(".sdd", "archive"));
+  const configPath = path.join(".sdd", "config.json");
+  const config = { chain };
+  if (Object.keys(customArtifacts).length > 0) {
+    config.custom_artifacts = customArtifacts;
+  }
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  console.log("  Created .sdd/ and .sdd/archive/");
+  console.log(`  Created .sdd/config.json (chain: ${chain.join(" → ")})`);
+
+  const workflowPath = path.join(".github", "workflows", "sdd-validate.yml");
+  if (!fs.existsSync(workflowPath)) {
+    const addAction = await ask("  Add GitHub Action to auto-validate SDD artifacts on every PR? (y/N): ");
+    if (addAction.toLowerCase() === "y") {
+      const workflowSrc = path.join(TEMPLATES_DIR, "sdd-validate.yml");
+      if (fs.existsSync(workflowSrc)) {
+        ensureDir(path.dirname(workflowPath));
+        fs.copyFileSync(workflowSrc, workflowPath);
+        console.log("  Created .github/workflows/sdd-validate.yml");
+      }
+    }
+  }
+
+  const names = selected.map(([, a]) => a.name).join(", ");
+  console.log(`\n  Done! Spextral initialized for ${names}.`);
+  console.log('  Type SDD_WAKE in your AI chat to get started.\n');
+}
+
+module.exports = { cmdInit };
