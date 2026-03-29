@@ -528,7 +528,7 @@ async function cmdInit() {
   // GitHub Action prompt
   const workflowPath = path.join(".github", "workflows", "sdd-validate.yml");
   if (!fs.existsSync(workflowPath)) {
-    const addAction = await ask("  Add GitHub Action for SDD validation on PRs? (y/N): ");
+    const addAction = await ask("  Add GitHub Action to auto-validate SDD artifacts on every PR? (y/N): ");
     if (addAction.toLowerCase() === "y") {
       const workflowSrc = path.join(TEMPLATES_DIR, "sdd-validate.yml");
       if (fs.existsSync(workflowSrc)) {
