@@ -1,4 +1,4 @@
-# Spextral — Spec-Driven Development Protocol (Version 2.0)
+# Spextral — Spec-Driven Development Protocol (Version 2.4)
 
 ## 1. Vision and Philosophy
 
@@ -20,22 +20,35 @@ Framework SDD agnostico basado en instrucciones portables con artefactos version
 
 ### Compatibility
 
-| Platform | FileWrite | SubagentSpawn | CommandExec | ContextMemory |
-|----------|-----------|---------------|-------------|---------------|
-| Claude Code | Yes | Yes | Yes | Yes |
-| Cursor | Yes | No | No | Partial |
-| GitHub Copilot | Yes | No | No | Partial |
-| Roo Code | Yes | No | Yes | Partial |
-| Kiro | Yes | No | No | Partial |
+| Platform | FileWrite | SubagentSpawn | CommandExec | ContextMemory | Native Skills |
+|----------|-----------|---------------|-------------|---------------|---------------|
+| Claude Code | Yes | Yes | Yes | Yes | Yes |
+| Cursor | Yes | No | No | Partial | No |
+| GitHub Copilot | Yes | No | No | Partial | Yes |
+| Kiro | Yes | No | No | Partial | Yes |
+| Roo Code | Yes | No | Yes | Partial | No |
+| Windsurf | Yes | No | No | Partial | No |
+| Gemini CLI | Yes | No | Yes | Partial | No |
+| Cline | Yes | No | Yes | Partial | No |
+| Codex CLI | Yes | Yes | Yes | Yes | No |
+| Trae | Yes | No | No | Partial | No |
 
 ### Installation
 
-Copy this file to the path your AI reads:
-- **Claude Code:** `.claude/skills/spextral.md`
-- **Cursor:** `.cursorrules`
-- **GitHub Copilot:** `.github/copilot/spextral.md`
+Run `npx spextral init` to auto-install for one or more agents, or copy this file manually:
+- **Claude Code:** `CLAUDE.md` (+ skills in `.claude/skills/`)
+- **Cursor:** `.cursor/rules/spextral.mdc`
+- **GitHub Copilot:** `.github/copilot-instructions.md` (+ skills in `.github/skills/`)
+- **Kiro:** `.kiro/steering/spextral.md` (+ skills in `.kiro/skills/`)
 - **Roo Code:** `.clinerules`
+- **Windsurf:** `.windsurf/rules/spextral.md`
+- **Gemini CLI:** `GEMINI.md`
+- **Cline:** `.cline/rules/spextral.md`
+- **Codex CLI:** `AGENTS.md`
+- **Trae:** `.trae/rules/spextral.md`
 - Or set `SDD_ROOT` environment variable for monorepos.
+
+Multiple agents can coexist in the same project — each reads the protocol from its own path while sharing the `.sdd/` directory as the single source of truth.
 
 Quick start: type `SDD_WAKE` (case-insensitive) in your AI chat.
 
@@ -63,7 +76,7 @@ On receiving this command:
    - Group artifacts by `project_slug`.
    - Within each group, find the most recent by timestamp.
    - Apply **Lazy Loading**: Read only the frontmatter of the most recent file, ignoring the rest.
-   - Verify chain integrity (`previous_artifact`, `next_artifact`).
+   - Verify chain integrity using `.sdd/config.json`.
 4. **Capabilities Handshake:** The agent declares its active capabilities to adapt the flow:
 
 ```yaml
@@ -139,22 +152,31 @@ When the agent emits `blocking_review`, the human responds with one of these com
 Valid transitions between states are strictly the following. The AI must not invent states outside this set:
 
 ```
-draft → ready → validated → blocking_review → validated → archived
-                    ↓
-              fingerprint_mismatch → (fix) → ready
-                    ↓
-              checkpointed → (restore) → draft|ready
+draft → clarify → ready → validated → blocking_review → validated → archived
+                              ↓
+                        fingerprint_mismatch → (fix) → ready
+                              ↓
+                        checkpointed → (restore) → draft|ready
 ```
 
 | Status | Meaning / Action |
 |--------|-----------------|
 | `draft` | In development. Requires confirmation. |
+| `clarify` | **Adversarial Review**: The Agent executes an internal review searching for ambiguities, missing edge cases, and contradictions. It proposes clarification questions to the human. Transition to `ready` occurs **exclusively** when the human responds and emits `SDD_APPROVE`. |
 | `ready` | Complete. `sddkit-validate` must run. |
 | `validated` | Verified. Subsequent features may proceed. |
 | `blocking_review` | **Configurable Pause**: The Agent stops according to `review_frequency`. Awaits human command. |
 | `fingerprint_mismatch` | **Discrepancy detected**: The fingerprint doesn't match. Requires review. |
 | `checkpointed` | State saved after interruption. |
 | `archived` | Moved to `.sdd/archive/`. Only accessible via index. |
+
+> **Clarify Protocol:** When an artifact transitions to `clarify`, the Agent MUST:
+> 1. Identify ambiguous or underspecified requirements.
+> 2. Check for contradictions between stated requirements.
+> 3. List missing edge cases or error scenarios.
+> 4. Present all findings as numbered questions to the human.
+> 5. Wait for `SDD_APPROVE` (or `SDD_MODIFY`) before transitioning to `ready`.
+> This ensures no artifact reaches implementation with unresolved ambiguities.
 
 > **Artifact Immutability Rule vs. Tasks:**
 > The states in the machine above apply **exclusively at the file/artifact level**. Once static artifacts like `{slug}/SPEC.md` or `{slug}/PLAN.md` reach `validated` status, **they are frozen immutably**.
@@ -184,7 +206,45 @@ Artifacts are organized in subdirectories per feature slug:
     └── ...
 ```
 
-Each slug gets its own folder under `.sdd/`. This keeps features isolated and the directory clean. Artifact references in frontmatter use relative paths within the slug folder (e.g. `previous_artifact: "CONTEXT.md"`, `next_artifact: "PLAN.md"`).
+Each slug gets its own folder under `.sdd/`. This keeps features isolated and the directory clean. The artifact chain order is defined centrally in `.sdd/config.json` (see §3.1 Chain Configuration).
+
+### Chain Configuration (§3.1)
+
+The artifact chain is defined in `.sdd/config.json` as the single source of truth for artifact ordering and routing. This file is generated during `spextral init` based on the user's feature selection.
+
+```json
+{
+  "chain": ["CONTEXT", "SPEC", "PLAN", "PROGRESS", "GDPR", "TEST", "SECURITY"],
+  "custom_artifacts": {
+    "GDPR": { "description": "GDPR compliance analysis and data processing inventory" }
+  }
+}
+```
+
+- **Required artifacts** (CONTEXT, SPEC, PLAN, PROGRESS) are always present and cannot be removed.
+- **Optional artifacts** (VALIDATION, CHECKPOINT, REVIEW, TEST, SECURITY) are included based on user selection during init.
+- **Custom artifacts** can be added during init for domain-specific needs (e.g. GDPR, DEPLOYMENT, MIGRATION). Their description is stored in `custom_artifacts` so agents know what to generate.
+- The chain order determines the routing logic for `spextral next` and the handoff sequence between artifacts.
+- Agents MUST read `.sdd/config.json` to determine the next artifact in the chain instead of relying on frontmatter fields.
+
+### Decision Fidelity
+
+Every `CONTEXT.md` (or `SPEC.md`, if no CONTEXT exists) MUST include a `## Decisions` section. Each decision is tagged with one of these labels:
+
+| Tag | Meaning | Agent Behavior |
+|-----|---------|----------------|
+| `[LOCKED]` | Immovable constraint set by the human. | The Agent must NOT deviate under any circumstance. |
+| `[DISCRETION]` | The Agent is free to decide the approach. | The Agent chooses and documents the rationale. |
+| `[DEFERRED]` | Explicitly out of scope for this feature. | The Agent must NOT implement or plan for it. |
+
+```markdown
+## Decisions
+- [LOCKED] Authentication must use OAuth 2.0 with PKCE flow.
+- [DISCRETION] Choice of HTTP client library.
+- [DEFERRED] Admin dashboard — will be a separate feature.
+```
+
+> **Rule:** If the Agent encounters an implementation choice not covered by any decision tag, it MUST treat it as `[DISCRETION]` and document its choice in PROGRESS.md.
 
 ---
 
@@ -196,18 +256,22 @@ Each slug gets its own folder under `.sdd/`. This keeps features isolated and th
 - **Initialization Protocol:**
   1. Create `.sdd/` and `.sdd/archive/` structure.
   2. Generate seed artifacts: `{slug}/CONTEXT.md` (empty template).
-  3. **Create exclusion rules for IDEs** that auto-vectorize:
-     - `.cursorignore`: add `.sdd/archive/**`
-     - `.copilotignore`: add `.sdd/archive/**`
+  3. **Create exclusion rules for IDEs** that auto-vectorize or index the workspace:
+     - `.cursorignore`: add `.sdd/archive/**` (Cursor)
+     - `.copilotignore`: add `.sdd/archive/**` (GitHub Copilot)
      - If these files already exist, append the rule without overwriting.
-  4. This ensures lazy loading is respected even in IDEs that index the entire workspace in background.
+  4. **Generate native skills** for agents that support them (Claude Code, Copilot, Kiro):
+     - `sdd-wake`: Activates the SDD protocol and runs discovery.
+     - `sdd-next`: Determines the next workflow step.
+     - `sdd-status`: Reports current project progress.
+  5. This ensures lazy loading is respected and agents have convenient shortcuts for common SDD operations.
 
 ### Frontmatter (Required vs Optional Fields)
 
 **Required (Minimalist):**
 ```yaml
 ---
-sdd_version: "2.0.0"
+sdd_version: "2.4.0"
 project_slug: "myapp"
 artifact_type: "SPEC"
 timestamp: "2024-01-15T10:30:00Z"
@@ -221,8 +285,6 @@ generated_by: "sddkit-spec"
 ---
 # ... required fields ...
 fingerprint: "myapp:SPEC:2024-01-15:chars_2450"  # Non-blank char count of body
-previous_artifact: "CONTEXT.md"
-next_artifact: "PLAN.md"
 session_id: "uuid-v4"
 depends_on: []        # For tasks in PLAN
 claimed_by: null      # format: "{session_id}::{timestamp_unix}" or null
@@ -232,8 +294,26 @@ autonomy_config:
   review_frequency: "per_module"  # per_task | per_module | end_only
   autonomy_level: "moderate"      # strict | moderate | full
   max_lines_threshold: 50         # Diff lines before E601 (default: 50)
+handoff:
+  next_action: "sddkit-plan"
+  prompt_hint: "Generate PLAN.md with task-to-REQ mapping"
 ---
 ```
+
+### Handoff Metadata
+
+Each artifact type declares its natural successor in the SDD chain. Agents MUST use this table to determine the recommended next action after completing an artifact. This enables automated workflow routing without hardcoding flow logic in the agent.
+
+| Current Artifact | handoff.next_action | handoff.prompt_hint |
+|------------------|---------------------|---------------------|
+| CONTEXT.md | sddkit-spec | Generate SPEC.md with EARS requirements and REQ-N identifiers |
+| SPEC.md | sddkit-plan | Generate PLAN.md with task-to-REQ mapping and depends_on |
+| PLAN.md | sddkit-implement | Begin implementation following dependency order |
+| PROGRESS.md (all done) | sddkit-test | Generate and execute unit tests |
+| TEST.md | sddkit-security | Run static security analysis |
+| SECURITY.md | sddkit-archive | Archive validated artifacts |
+
+Agents MAY include handoff metadata in artifact frontmatter for explicit routing (see `handoff` field in the Optional example above). When the agent completes an artifact and transitions it to `validated`, it SHOULD read the handoff table to suggest or automatically execute the next action (depending on `autonomy_level`).
 
 ### Normalized Fingerprints
 
@@ -253,14 +333,32 @@ This guarantees the fingerprint is identical regardless of operating system, and
 
 > **Intentional trade-off:** Non-blank character counting doesn't detect changes that only affect indentation (e.g. a reindented Python code block). This is a deliberate concession in favor of cross-OS portability. The fingerprint is designed to detect accidental corruption and content manipulation, not to be a cryptographic hash.
 
+### SPEC.md Conventions — Requirements Format
+
+**Mandatory Requirement IDs:** Every requirement in `SPEC.md` MUST have a unique numeric identifier with the format `REQ-N` (e.g. `REQ-1`, `REQ-2`). Requirements without IDs are invalid and `sddkit-validate` must flag them.
+
+**Recommended: EARS Format (Easy Approach to Requirements Syntax).** Use these sentence templates to write unambiguous requirements:
+
+| EARS Pattern | Template | Example |
+|-------------|----------|---------|
+| **Ubiquitous** | The system shall `<action>`. | `REQ-1` The system shall hash passwords with bcrypt. |
+| **Event-driven** | When `<trigger>`, the system shall `<action>`. | `REQ-2` When a login fails 5 times, the system shall lock the account for 15 min. |
+| **State-driven** | While `<state>`, the system shall `<action>`. | `REQ-3` While in offline mode, the system shall queue mutations locally. |
+| **Unwanted** | If `<condition>`, the system shall `<action>`. | `REQ-4` If the JWT is expired, the system shall return HTTP 401. |
+| **Optional** | Where `<feature>`, the system shall `<action>`. | `REQ-5` Where 2FA is enabled, the system shall require a TOTP code. |
+
+> **Note:** EARS is *recommended* (not mandatory) for writing style, but `REQ-N` IDs are *mandatory*. The IDs enable traceability across PLAN tasks, tests, and commits.
+
 ### sddkit-validate (Lightweight and Universal)
 
 - **Required Capabilities:** `FileRead`, `YAMLParse`
 - **Validation Protocol:**
-  1. **Structural Validation:** Verify YAML syntax strictly. Verify that `status` is one of the valid states defined in the state machine.
-  2. **Existence Validation (E602):** Check that `previous_artifact` and `next_artifact` exist physically on disk (search both `.sdd/` and `.sdd/archive/`). Emit error E602 if not.
+  1. **Structural Validation:** Verify YAML syntax strictly. Verify that `status` is one of the valid states defined in the state machine (including `clarify`).
+  2. **Chain Validation (E602):** Check that all artifacts in `.sdd/config.json` chain exist physically on disk (search both `.sdd/{slug}/` and `.sdd/archive/`). Emit error E602 if any are missing.
   3. **Fingerprint Validation:** Extract post-frontmatter body, normalize to LF, count non-blank characters, and compare against stored fingerprint. If discrepancy, set `status: fingerprint_mismatch`.
-  4. Emit the report `.sdd/{slug}/VALIDATION.md`.
+  4. **REQ-ID Validation (SPEC only):** If the artifact is a SPEC, verify every requirement has a `REQ-N` identifier. Flag any requirement without an ID as a warning.
+  5. **Context Budget Check:** Count the artifact's total lines. If it exceeds the recommended limit by >50% (see §9 Context Budgets), emit a warning suggesting the feature be split.
+  6. Emit the report `.sdd/{slug}/VALIDATION.md`.
 
 ### sddkit-checkpoint
 
@@ -289,12 +387,35 @@ This guarantees the fingerprint is identical regardless of operating system, and
 - **Required Capabilities:** `FileRead`, `FileWrite`
 - **Chain Repair Protocol:**
   1. Scan all artifacts in `.sdd/` and `.sdd/archive/`.
-  2. Detect broken links (`previous_artifact` or `next_artifact` that don't exist).
-  3. Reconstruct logical sequence based on timestamps and `artifact_type`.
+  2. Detect artifacts missing from the chain defined in `.sdd/config.json`.
+  3. Reconstruct chain in config based on timestamps and `artifact_type`.
   4. Recalculate fingerprints with normalized format if legacy format is detected.
   5. Release tasks with `claimed_by` from inactive sessions (>1 hour without activity).
   6. Generate repair report with changes made.
   7. If ambiguous, request human intervention.
+
+### PLAN.md Conventions — Task Mapping and Parallelism Markers
+
+**Mandatory Task-to-REQ Mapping:** Every task in `PLAN.md` MUST reference the `REQ-N` identifier(s) it satisfies from `SPEC.md`. This enables traceability and Goal-Backward Verification.
+
+**Parallelism Markers `(P)`:** If a task has NO blocking dependencies (`depends_on` is empty or all dependencies are already `done`), the Agent MUST append the suffix `(P)` to the task ID, indicating it is parallelizable. This enables subagents or the user to identify tasks that can be executed concurrently.
+
+```markdown
+## Tasks
+### T1.1 (P) — Set up project structure
+- covers: [REQ-1]
+- depends_on: []
+
+### T1.2 (P) — Implement user model
+- covers: [REQ-1, REQ-3]
+- depends_on: []
+
+### T2.1 — Implement auth middleware
+- covers: [REQ-2, REQ-4]
+- depends_on: [T1.2]
+```
+
+> **Rule:** `(P)` markers are recalculated dynamically. When a dependency is completed, the Agent must re-evaluate and add `(P)` to newly unblocked tasks in PROGRESS.md.
 
 ### sddkit-review (Devil-Advocate)
 
@@ -303,9 +424,15 @@ This guarantees the fingerprint is identical regardless of operating system, and
   1. Load `{slug}/SPEC.md` and `{slug}/PLAN.md`.
   2. **Contradiction Analysis:** Identify discrepancies between specification and plan.
   3. **Task Coverage:** Verify that each SPEC requirement has associated tasks.
-  4. **Edge Cases:** List unconsidered scenarios.
-  5. **Dependency Graph:** To validate cycles, the AI MUST write the **Topological Sort** (linear ordering) of all tasks. If linear ordering is impossible, emit E603 indicating the tasks involved in the cycle.
-  6. Generate `{slug}/REVIEW.md` with findings classified by severity (blocking / warning / informational).
+  4. **Goal-Backward Verification (mandatory):** The Agent MUST verify coverage **backward** — iterating every `REQ-N` in the SPEC and confirming it has explicit coverage in at least one PLAN task's `covers` field. Any uncovered REQ is a **blocking** finding. The verification output must be a checklist:
+     ```
+     ✅ REQ-1 → T1.1, T1.2
+     ✅ REQ-2 → T2.1
+     ❌ REQ-5 → NO COVERAGE — blocking
+     ```
+  5. **Edge Cases:** List unconsidered scenarios.
+  6. **Dependency Graph:** To validate cycles, the AI MUST write the **Topological Sort** (linear ordering) of all tasks. If linear ordering is impossible, emit E603 indicating the tasks involved in the cycle.
+  7. Generate `{slug}/REVIEW.md` with findings classified by severity (blocking / warning / informational).
 
 ### sddkit-implement (With Configurable Autonomy)
 
@@ -323,8 +450,18 @@ This guarantees the fingerprint is identical regardless of operating system, and
   5. **Safety Threshold (E601):** If the diff exceeds **`max_lines_threshold` lines (default: 50) or >10% of the file**, auto-generate a CHECKPOINT. Post-checkpoint behavior depends on `autonomy_level`:
      - `full`: Generates checkpoint and **continues** automatically.
      - `moderate` or `strict`: Generates checkpoint and switches to `blocking_review`. The human decides if the massive refactoring is desired.
-  6. Show diff or summary to the user.
-  7. Update `{slug}/PROGRESS.md`.
+  6. **Atomic Commits:** After completing each task, the Agent MUST create an atomic git commit using the requirement and task IDs. Format:
+     ```
+     feat(REQ-{n}/T{x.y}): <short description>
+     ```
+     Examples:
+     - `feat(REQ-1/T1.1): add user model with validation`
+     - `fix(REQ-4/T2.3): handle expired JWT with 401 response`
+     - `refactor(REQ-2/T1.5): extract auth middleware to separate module`
+     This ensures every commit is traceable to a requirement, enables granular rollback, and prevents monolithic "implement everything" commits that are impossible to review or revert.
+     > **Note:** If `CommandExec` is not available, the Agent documents the suggested commit message in PROGRESS.md for the user to execute manually.
+  7. Show diff or summary to the user.
+  8. Update `{slug}/PROGRESS.md`.
 
 ### sddkit-test (Unit Testing)
 
@@ -352,15 +489,13 @@ This guarantees the fingerprint is identical regardless of operating system, and
 ```yaml
 # TEST.md frontmatter
 ---
-sdd_version: "2.0.0"
+sdd_version: "2.4.0"
 project_slug: "{slug}"
 artifact_type: "TEST"
 timestamp: "2026-01-15T10:30:00Z"
 status: "validated"
 generated_by: "sddkit-test"
 fingerprint: "{slug}:TEST:{date}:chars_{count}"
-previous_artifact: "{slug}/PROGRESS.md"
-next_artifact: "{slug}/SECURITY.md"
 test_summary:
   total: 5
   passed: 5
@@ -398,15 +533,13 @@ test_summary:
 ```yaml
 # SECURITY.md frontmatter
 ---
-sdd_version: "2.0.0"
+sdd_version: "2.4.0"
 project_slug: "{slug}"
 artifact_type: "SECURITY"
 timestamp: "2026-01-15T10:30:00Z"
 status: "validated"
 generated_by: "sddkit-security"
 fingerprint: "{slug}:SECURITY:{date}:chars_{count}"
-previous_artifact: "{slug}/TEST.md"
-next_artifact: null
 security_summary:
   critical: 0
   high: 1
@@ -426,7 +559,7 @@ security_summary:
 - **Protocol:**
   1. Move eligible artifacts to `.sdd/archive/`.
   2. Update `INDEX.md` with fingerprints of archived files.
-  3. Maintain links in `previous_artifact`/`next_artifact` for traceability.
+  3. Update `.sdd/config.json` chain if needed for traceability.
 
 ---
 
@@ -498,7 +631,23 @@ export SDD_ROOT="/path/to/monorepo/packages/auth/.sdd"
 
 ### Lazy Loading + Archiving
 
-Spextral is designed to not overwhelm the AI's context window. Features are strictly forbidden from using `cat .sdd/*` globally. Context navigation must be calculated by traversing the `previous_artifact` and `next_artifact` YAML variables unambiguously, forming a doubly linked list. Old artifacts are automatically archived, keeping only the index in memory.
+Spextral is designed to not overwhelm the AI's context window. Features are strictly forbidden from using `cat .sdd/*` globally. Context navigation must follow the artifact chain defined in `.sdd/config.json`, which serves as the single source of truth for artifact ordering. Old artifacts are automatically archived, keeping only the index in memory.
+
+### Context Budgets (Artifact Size Limits)
+
+To prevent LLM context degradation ("lost in the middle" effect), artifacts SHOULD respect these recommended size limits:
+
+| Artifact | Max Lines | Rationale |
+|----------|-----------|-----------|
+| `CONTEXT.md` | ~100 | Only high-level context and decisions. |
+| `SPEC.md` | ~250 | Forces modularization into smaller features. |
+| `PLAN.md` | ~200 | Tasks should be granular, not encyclopedic. |
+| `PROGRESS.md` | ~150 | Completed tasks auto-collapse (see §6). |
+| `REVIEW.md` | ~150 | Focus on blocking/warning findings only. |
+| `TEST.md` | ~100 | Summary + failures only; full logs stay external. |
+| `SECURITY.md` | ~100 | Summary + critical/high findings. |
+
+> **Enforcement:** These are *soft limits*, not hard errors. If `sddkit-validate` detects an artifact exceeding its budget by >50%, it emits a **warning** (not an error) suggesting the feature be split into smaller slugs. The Agent should proactively suggest splitting when drafting a SPEC that approaches the limit.
 
 ### Context Leak Protection in IDEs
 
@@ -553,6 +702,16 @@ Practical case: "REST API":
 ---
 
 ## CHANGELOG
+
+### v2.3.0
+- **Decision Fidelity:** `CONTEXT.md` now requires a `## Decisions` section with `[LOCKED]`, `[DISCRETION]`, `[DEFERRED]` tags
+- **EARS + REQ IDs:** Requirements in `SPEC.md` must have `REQ-N` identifiers. EARS sentence templates recommended
+- **Parallelism Markers:** Tasks in `PLAN.md` with no blocking dependencies get `(P)` suffix
+- **Clarify State:** New `clarify` state in Artifact State Machine (`draft → clarify → ready`). Agent performs adversarial review before `ready`
+- **Goal-Backward Verification:** `sddkit-review` must verify every REQ has explicit PLAN coverage (backward check)
+- **Context Budgets:** Recommended size limits per artifact to prevent LLM context degradation
+- **Atomic Commits:** `sddkit-implement` creates granular commits per task using `feat(REQ-n/Tx.y):` format
+- `sddkit-validate` now checks REQ-ID presence and Context Budget compliance
 
 ### v2.1.0
 - Adds `sddkit-test` (automatic unit testing post-implementation)

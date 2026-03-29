@@ -11,6 +11,7 @@ const SPEC_SOURCE = path.join(TEMPLATES_DIR, SPEC_FILENAME);
 
 const VALID_STATES = [
   "draft",
+  "clarify",
   "ready",
   "validated",
   "blocking_review",
@@ -19,31 +20,161 @@ const VALID_STATES = [
   "archived",
 ];
 
-const IDE_TARGETS = {
+const AGENT_REGISTRY = {
   "claude-code": {
     name: "Claude Code",
     dest: "CLAUDE.md",
     isFile: true,
+    skills: { dir: path.join(".claude", "skills"), format: "skill" },
+    exclusionFile: null,
   },
   cursor: {
     name: "Cursor",
-    dest: ".cursorrules",
+    dest: path.join(".cursor", "rules", "spextral.mdc"),
     isFile: true,
+    mdcFormat: true,
+    skills: null,
+    exclusionFile: ".cursorignore",
   },
   copilot: {
     name: "GitHub Copilot",
-    dest: path.join(".github", "copilot", SPEC_FILENAME),
+    dest: path.join(".github", "copilot-instructions.md"),
+    isFile: false,
+    skills: { dir: path.join(".github", "skills"), format: "copilot" },
+    exclusionFile: ".copilotignore",
+  },
+  kiro: {
+    name: "Kiro",
+    dest: path.join(".kiro", "steering", "spextral.md"),
+    isFile: false,
+    kiroSteering: true,
+    skills: { dir: path.join(".kiro", "skills"), format: "skill-dir" },
+    exclusionFile: null,
   },
   "roo-code": {
     name: "Roo Code",
     dest: ".clinerules",
     isFile: true,
+    skills: null,
+    exclusionFile: null,
+  },
+  windsurf: {
+    name: "Windsurf",
+    dest: path.join(".windsurf", "rules", "spextral.md"),
+    isFile: false,
+    skills: null,
+    exclusionFile: null,
+  },
+  "gemini-cli": {
+    name: "Gemini CLI",
+    dest: "GEMINI.md",
+    isFile: true,
+    skills: null,
+    exclusionFile: null,
+  },
+  cline: {
+    name: "Cline",
+    dest: path.join(".cline", "rules", "spextral.md"),
+    isFile: false,
+    skills: null,
+    exclusionFile: null,
+  },
+  codex: {
+    name: "Codex CLI",
+    dest: "AGENTS.md",
+    isFile: true,
+    skills: null,
+    exclusionFile: null,
+  },
+  trae: {
+    name: "Trae",
+    dest: path.join(".trae", "rules", "spextral.md"),
+    isFile: false,
+    skills: null,
+    exclusionFile: null,
   },
   manual: {
     name: "Manual (copy to templates/ only)",
     dest: null,
+    skills: null,
+    exclusionFile: null,
   },
 };
+
+const SDD_ARTIFACTS = [
+  { name: "CONTEXT",    required: true,  description: "Project context and decisions" },
+  { name: "SPEC",       required: true,  description: "Requirements (EARS format, REQ-N IDs)" },
+  { name: "PLAN",       required: true,  description: "Tasks with dependency graph" },
+  { name: "PROGRESS",   required: true,  description: "Execution status tracking" },
+  { name: "VALIDATION", required: false, description: "Validation report" },
+  { name: "CHECKPOINT", required: false, description: "Recovery points" },
+  { name: "REVIEW",     required: false, description: "Review notes (Devil-Advocate)" },
+  { name: "TEST",       required: false, description: "Test artifacts and results" },
+  { name: "SECURITY",   required: false, description: "Security analysis" },
+];
+
+const SDD_SKILLS = {
+  "sdd-wake": {
+    description: "Activate the SDD protocol and discover current project state",
+    prompt:
+      "Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity, perform capabilities handshake, and report status with a suggested next action.",
+  },
+  "sdd-next": {
+    description: "Determine the next step in the SDD workflow",
+    prompt:
+      "Analyze the current .sdd/ artifacts and their statuses to determine the next logical step in the SDD workflow. Report the current state, dependency order if applicable, and the recommended action.",
+  },
+  "sdd-status": {
+    description: "Show current SDD project status and progress",
+    prompt:
+      "Run SDD_STATUS. For each project slug in .sdd/, report: artifact states, progress percentage (completed/total tasks), any blocking issues, and current capabilities.",
+  },
+};
+
+function wrapMdc(content) {
+  return `---
+description: Spextral SDD Protocol
+globs:
+alwaysApply: true
+---
+
+${content}`;
+}
+
+function wrapKiroSteering(content) {
+  return `---
+inclusion: always
+---
+
+${content}`;
+}
+
+function generateNativeSkills(agentKey, agent) {
+  if (!agent.skills) return;
+
+  for (const [name, skill] of Object.entries(SDD_SKILLS)) {
+    if (agent.skills.format === "copilot" || agent.skills.format === "skill-dir") {
+      // SKILL.md format (Copilot, Kiro): dir/X/SKILL.md
+      const skillDir = path.join(agent.skills.dir, name);
+      const skillPath = path.join(skillDir, "SKILL.md");
+      ensureDir(skillDir);
+      fs.writeFileSync(
+        skillPath,
+        `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${skill.prompt}\n`
+      );
+      console.log(`    Skill: ${skillPath}`);
+    } else {
+      // skill format (Claude Code): .claude/skills/X.md
+      const filePath = path.join(agent.skills.dir, `${name}.md`);
+      ensureDir(path.dirname(filePath));
+      fs.writeFileSync(
+        filePath,
+        `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${skill.prompt}\n`
+      );
+      console.log(`    Skill: ${filePath}`);
+    }
+  }
+}
 
 function ask(question) {
   const rl = readline.createInterface({
@@ -74,74 +205,259 @@ function appendIfMissing(filePath, line) {
   }
 }
 
+async function askFeatures() {
+  const selected = new Set(
+    SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name)
+  );
+
+  function display() {
+    console.log("\n  Select SDD features:\n");
+    SDD_ARTIFACTS.forEach((a, i) => {
+      const checked = selected.has(a.name) ? "x" : " ";
+      const tag = a.required ? " (required)" : "";
+      console.log(
+        `    ${i + 1}. [${checked}] ${a.name}.md${tag}  — ${a.description}`
+      );
+    });
+    const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
+      .map((a) => a.name)
+      .join(" → ");
+    console.log(`\n  Chain: ${chain}\n`);
+  }
+
+  display();
+
+  const customArtifacts = {};
+
+  while (true) {
+    const input = await ask(
+      "  Toggle number(s) | A: add custom | R: reorder | Enter: confirm: "
+    );
+
+    if (input === "") break;
+
+    if (input.toLowerCase() === "a") {
+      const name = await ask("  Artifact name (e.g. GDPR, DEPLOYMENT): ");
+      if (!name) continue;
+      const upper = name.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+      if (!upper) {
+        console.log("  Invalid name.");
+        continue;
+      }
+      if (SDD_ARTIFACTS.some((a) => a.name === upper)) {
+        console.log(`  ${upper} already exists. Toggle it with its number.`);
+        continue;
+      }
+      const desc = await ask("  Description: ");
+      const artifact = { name: upper, required: false, description: desc || "Custom artifact", custom: true };
+      SDD_ARTIFACTS.push(artifact);
+      selected.add(upper);
+      customArtifacts[upper] = { description: artifact.description };
+      display();
+      continue;
+    }
+
+    if (input.toLowerCase() === "r") {
+      await reorderChain(selected);
+      display();
+      continue;
+    }
+
+    const nums = input.split(",").map((s) => s.trim()).filter(Boolean);
+    for (const n of nums) {
+      const idx = parseInt(n, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= SDD_ARTIFACTS.length) {
+        console.log(`  Invalid: ${n}`);
+        continue;
+      }
+      const artifact = SDD_ARTIFACTS[idx];
+      if (artifact.required) {
+        console.log(`  ${artifact.name} is required and cannot be removed.`);
+        continue;
+      }
+      if (selected.has(artifact.name)) {
+        selected.delete(artifact.name);
+      } else {
+        selected.add(artifact.name);
+      }
+    }
+    display();
+  }
+
+  // Return chain and custom artifacts info
+  const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name)).map((a) => a.name);
+  return { chain, customArtifacts };
+}
+
+async function reorderChain(selected) {
+  const optional = SDD_ARTIFACTS.filter(
+    (a) => selected.has(a.name) && !a.required
+  );
+
+  if (optional.length === 0) {
+    console.log("  No optional artifacts to reorder.");
+    return;
+  }
+
+  console.log("\n  Current optional artifact positions:");
+  optional.forEach((a, i) => {
+    const globalIdx = SDD_ARTIFACTS.indexOf(a);
+    console.log(`    ${i + 1}. ${a.name} (position ${globalIdx + 1})`);
+  });
+
+  const input = await ask(
+    "\n  New order (e.g. 2,1,3) or Enter to keep: "
+  );
+  if (input === "") return;
+
+  const indices = input.split(",").map((s) => parseInt(s.trim(), 10) - 1);
+  if (
+    indices.length !== optional.length ||
+    indices.some((i) => isNaN(i) || i < 0 || i >= optional.length)
+  ) {
+    console.log("  Invalid order. Keeping current.");
+    return;
+  }
+
+  // Check no duplicates
+  if (new Set(indices).size !== indices.length) {
+    console.log("  Duplicate positions. Keeping current.");
+    return;
+  }
+
+  const reordered = indices.map((i) => optional[i]);
+
+  // Remove old optional artifacts from SDD_ARTIFACTS and re-insert in new order
+  // Find insertion point (after last required artifact)
+  const lastRequiredIdx = SDD_ARTIFACTS.reduce((max, a, i) =>
+    a.required ? i : max, 0
+  );
+
+  // Remove all optional that are selected
+  const optNames = new Set(optional.map((a) => a.name));
+  const remaining = SDD_ARTIFACTS.filter((a) => !optNames.has(a.name));
+
+  // Re-insert after required artifacts
+  const insertAt = remaining.reduce((max, a, i) =>
+    a.required ? i : max, 0
+  ) + 1;
+  remaining.splice(insertAt, 0, ...reordered);
+
+  // Replace SDD_ARTIFACTS contents in-place
+  SDD_ARTIFACTS.length = 0;
+  SDD_ARTIFACTS.push(...remaining);
+
+  console.log("  Reordered.");
+}
+
 // ── init ──────────────────────────────────────────────
 
 async function cmdInit() {
   console.log("\n  Spextral — Spec-Driven Development Protocol\n");
 
-  const choices = Object.entries(IDE_TARGETS);
-  console.log("  Which IDE/agent platform are you using?\n");
+  const choices = Object.entries(AGENT_REGISTRY);
+  console.log("  Which agent platform(s) are you using?\n");
+  console.log("    0) All agents");
   choices.forEach(([key, val], i) => {
     console.log(`    ${i + 1}) ${val.name}`);
   });
 
-  const answer = await ask("\n  Select (1-5): ");
-  const idx = parseInt(answer, 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= choices.length) {
-    console.error("  Invalid selection. Aborting.");
+  const answer = await ask(`\n  Select (comma-separated, e.g. 1,3,5 or 0 for all): `);
+  const tokens = answer.split(",").map((s) => s.trim()).filter(Boolean);
+
+  let selected = [];
+  if (tokens.includes("0")) {
+    selected = choices.filter(([k]) => k !== "manual");
+  } else {
+    for (const t of tokens) {
+      const idx = parseInt(t, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= choices.length) {
+        console.error(`  Invalid selection: ${t}. Aborting.`);
+        process.exit(1);
+      }
+      selected.push(choices[idx]);
+    }
+  }
+
+  if (selected.length === 0) {
+    console.error("  No agents selected. Aborting.");
     process.exit(1);
   }
 
-  const [ideKey, ide] = choices[idx];
   const specContent = fs.readFileSync(SPEC_SOURCE, "utf-8");
+  const writtenDests = new Set();
+  const exclusions = [];
 
-  // Copy spec to IDE-specific location
-  if (ide.dest) {
-    const destPath = path.resolve(ide.dest);
-    if (ide.isFile) {
-      // For Cursor/Roo Code, the destination IS the file
+  for (const [agentKey, agent] of selected) {
+    console.log(`\n  [${agent.name}]`);
+
+    // Deploy spec to agent destination
+    if (agent.dest && !writtenDests.has(agent.dest)) {
+      writtenDests.add(agent.dest);
+      const destPath = path.resolve(agent.dest);
+      let content = specContent;
+      if (agent.mdcFormat) content = wrapMdc(specContent);
+      else if (agent.kiroSteering) content = wrapKiroSteering(specContent);
+
       ensureDir(path.dirname(destPath));
-      if (fs.existsSync(destPath)) {
+      if (agent.isFile && fs.existsSync(destPath)) {
         const existing = fs.readFileSync(destPath, "utf-8");
         if (!existing.includes("sdd_version")) {
-          fs.writeFileSync(destPath, existing + "\n\n" + specContent);
-          console.log(`  Appended to ${ide.dest}`);
+          fs.writeFileSync(destPath, existing + "\n\n" + content);
+          console.log(`    Appended to ${agent.dest}`);
         } else {
-          fs.writeFileSync(destPath, specContent);
-          console.log(`  Updated ${ide.dest}`);
+          fs.writeFileSync(destPath, content);
+          console.log(`    Updated ${agent.dest}`);
         }
       } else {
-        fs.writeFileSync(destPath, specContent);
-        console.log(`  Created ${ide.dest}`);
+        fs.writeFileSync(destPath, content);
+        console.log(`    Created ${agent.dest}`);
       }
-    } else {
-      ensureDir(path.dirname(destPath));
-      fs.writeFileSync(destPath, specContent);
-      console.log(`  Created ${ide.dest}`);
+    } else if (!agent.dest) {
+      console.log("    Manual mode — spec available at templates/spextral.md in the package.");
     }
-  } else {
-    console.log("  Manual mode — spec available at templates/spextral.md in the package.");
+
+    // Exclusion files
+    if (agent.exclusionFile) {
+      appendIfMissing(agent.exclusionFile, ".sdd/archive/**");
+      exclusions.push(agent.exclusionFile);
+      console.log(`    Updated ${agent.exclusionFile}`);
+    }
+
+    // Native skills
+    generateNativeSkills(agentKey, agent);
   }
 
-  // Create .sdd/ structure
+  // Feature selection
+  const { chain, customArtifacts } = await askFeatures();
+
+  // Create .sdd/ structure and config.json
   ensureDir(path.join(".sdd", "archive"));
+  const configPath = path.join(".sdd", "config.json");
+  const config = { chain };
+  if (Object.keys(customArtifacts).length > 0) {
+    config.custom_artifacts = customArtifacts;
+  }
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
   console.log("  Created .sdd/ and .sdd/archive/");
+  console.log(`  Created .sdd/config.json (chain: ${chain.join(" → ")})`);
 
-  // Create IDE exclusion files (only for relevant IDEs)
-  const exclusions = [];
-  if (ideKey === "cursor") {
-    appendIfMissing(".cursorignore", ".sdd/archive/**");
-    exclusions.push(".cursorignore");
-  }
-  if (ideKey === "copilot") {
-    appendIfMissing(".copilotignore", ".sdd/archive/**");
-    exclusions.push(".copilotignore");
-  }
-  if (exclusions.length > 0) {
-    console.log(`  Updated ${exclusions.join(" and ")}`);
+  // GitHub Action prompt
+  const workflowPath = path.join(".github", "workflows", "sdd-validate.yml");
+  if (!fs.existsSync(workflowPath)) {
+    const addAction = await ask("  Add GitHub Action for SDD validation on PRs? (y/N): ");
+    if (addAction.toLowerCase() === "y") {
+      const workflowSrc = path.join(TEMPLATES_DIR, "sdd-validate.yml");
+      if (fs.existsSync(workflowSrc)) {
+        ensureDir(path.dirname(workflowPath));
+        fs.copyFileSync(workflowSrc, workflowPath);
+        console.log("  Created .github/workflows/sdd-validate.yml");
+      }
+    }
   }
 
-  console.log(`\n  Done! Spextral initialized for ${ide.name}.`);
+  const names = selected.map(([, a]) => a.name).join(", ");
+  console.log(`\n  Done! Spextral initialized for ${names}.`);
   console.log('  Type SDD_WAKE in your AI chat to get started.\n');
 }
 
@@ -154,6 +470,17 @@ function parseFrontmatter(content) {
   const raw = match[1];
   const fm = {};
   for (const line of raw.split("\n")) {
+    // Inline YAML arrays: depends_on: [T1, T2.1, T3]
+    const arrMatch = line.match(/^(\w[\w_]*):\s*\[([^\]]*)\]\s*$/);
+    if (arrMatch) {
+      const items = arrMatch[2]
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+      fm[arrMatch[1]] = items;
+      continue;
+    }
+    // Scalar values (existing behavior)
     const m = line.match(/^(\w[\w_]*):\s*"?([^"]*)"?\s*$/);
     if (m) fm[m[1]] = m[2];
   }
@@ -199,7 +526,8 @@ function cmdDoctor() {
     artifacts.push({ display: f, filePath: path.join(sddDir, f), slug: null, file: f });
   }
 
-  // Build set of all known artifact filenames for chain validation
+  // Load config for chain validation
+  const config = loadSddConfig(sddDir);
   const archiveDir = path.join(sddDir, "archive");
   const archiveFiles = fs.existsSync(archiveDir)
     ? fs.readdirSync(archiveDir).filter((f) => f.endsWith(".md"))
@@ -236,16 +564,6 @@ function cmdDoctor() {
       issues++;
     }
 
-    // Validate artifact chain
-    if (frontmatter.previous_artifact && !allFiles.has(frontmatter.previous_artifact)) {
-      console.log(`  FAIL  ${display} — previous_artifact "${frontmatter.previous_artifact}" not found`);
-      issues++;
-    }
-    if (frontmatter.next_artifact && !allFiles.has(frontmatter.next_artifact)) {
-      console.log(`  FAIL  ${display} — next_artifact "${frontmatter.next_artifact}" not found`);
-      issues++;
-    }
-
     // Validate fingerprint
     if (frontmatter.fingerprint) {
       const match = frontmatter.fingerprint.match(/chars_(\d+)/);
@@ -261,6 +579,29 @@ function cmdDoctor() {
       }
     } else {
       console.log(`  OK    ${display} — no fingerprint (skipped)`);
+    }
+  }
+
+  // Validate chain integrity per slug (only for active slugs with artifacts)
+  if (config.chain && slugDirs.length > 0) {
+    console.log(`\n  Chain: ${config.chain.join(" → ")}`);
+    for (const slug of slugDirs) {
+      const slugPath = path.join(sddDir, slug);
+      const slugFiles = fs.readdirSync(slugPath).filter((f) => f.endsWith(".md"));
+      const slugArtifacts = new Set(slugFiles.map((f) => f.replace(".md", "").replace(/^CHECKPOINT-.*/, "CHECKPOINT")));
+
+      // Only warn about missing artifacts if the slug has progressed past them in the chain
+      const presentInChain = config.chain.filter((name) => slugArtifacts.has(name));
+      if (presentInChain.length > 0) {
+        const lastPresent = Math.max(...presentInChain.map((name) => config.chain.indexOf(name)));
+        for (let i = 0; i < lastPresent; i++) {
+          const expected = config.chain[i];
+          if (!slugArtifacts.has(expected) && !archiveFiles.includes(`${expected}.md`)) {
+            console.log(`  WARN  ${slug}/ — missing ${expected}.md (expected in chain before ${config.chain[lastPresent]}.md)`);
+            issues++;
+          }
+        }
+      }
     }
   }
 
@@ -333,6 +674,316 @@ async function cmdUpdate() {
   }
 }
 
+// ── topological sort ─────────────────────────────────
+
+/**
+ * Kahn's algorithm — O(V+E) topological sort.
+ * @param {Map<string, string[]>} graph  adjacency list (task → depends_on[])
+ * @returns {{ order: string[], cycle: string[] | null }}
+ *   order: linear execution order (empty if cycle detected)
+ *   cycle: list of tasks involved in cycle, or null
+ */
+function topologicalSort(graph) {
+  const inDegree = new Map();
+  const adj = new Map(); // reverse: dependency → dependents
+
+  for (const [node, deps] of graph) {
+    if (!inDegree.has(node)) inDegree.set(node, 0);
+    if (!adj.has(node)) adj.set(node, []);
+    for (const dep of deps) {
+      if (!inDegree.has(dep)) inDegree.set(dep, 0);
+      if (!adj.has(dep)) adj.set(dep, []);
+      adj.get(dep).push(node);
+      inDegree.set(node, inDegree.get(node) + 1);
+    }
+  }
+
+  const queue = [];
+  for (const [node, deg] of inDegree) {
+    if (deg === 0) queue.push(node);
+  }
+
+  const order = [];
+  while (queue.length > 0) {
+    const node = queue.shift();
+    order.push(node);
+    for (const neighbor of adj.get(node)) {
+      const newDeg = inDegree.get(neighbor) - 1;
+      inDegree.set(neighbor, newDeg);
+      if (newDeg === 0) queue.push(neighbor);
+    }
+  }
+
+  if (order.length !== inDegree.size) {
+    const cycle = [];
+    for (const [node, deg] of inDegree) {
+      if (deg > 0) cycle.push(node);
+    }
+    return { order: [], cycle };
+  }
+
+  return { order, cycle: null };
+}
+
+function loadSddConfig(sddDir) {
+  const configPath = path.join(sddDir, "config.json");
+  if (!fs.existsSync(configPath)) {
+    // Fallback: default full chain for projects initialized before config.json
+    return { chain: ["CONTEXT", "SPEC", "PLAN", "PROGRESS", "VALIDATION", "CHECKPOINT", "REVIEW", "TEST", "SECURITY"] };
+  }
+  return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+}
+
+// ── next ─────────────────────────────────────────────
+
+/**
+ * Discovers .sdd/ state: slugs, their artifacts, frontmatters, and tasks.
+ * Returns everything needed for routing decisions.
+ */
+function discoverSddState(sddDir) {
+  const slugDirs = fs.readdirSync(sddDir).filter((f) => {
+    const full = path.join(sddDir, f);
+    return fs.statSync(full).isDirectory() && f !== "archive";
+  });
+
+  const slugs = [];
+
+  for (const slug of slugDirs) {
+    const slugPath = path.join(sddDir, slug);
+    const mdFiles = fs.readdirSync(slugPath).filter((f) => f.endsWith(".md"));
+
+    const artifacts = {};
+    for (const file of mdFiles) {
+      const content = fs.readFileSync(path.join(slugPath, file), "utf-8");
+      const { frontmatter, body } = parseFrontmatter(content);
+      const type = file.replace(".md", "").replace(/^CHECKPOINT-.*/, "CHECKPOINT");
+      artifacts[type] = { file, frontmatter, body, status: frontmatter ? frontmatter.status : null };
+    }
+
+    slugs.push({ slug, artifacts, path: slugPath });
+  }
+
+  return slugs;
+}
+
+/**
+ * Extracts task dependency graph from PLAN.md body.
+ * Parses markdown headers like ### T1.1 (P) — description
+ * and depends_on lines like - depends_on: [T1.1, T1.2]
+ */
+function extractTaskGraph(planBody) {
+  const graph = new Map();
+  const lines = planBody.split("\n");
+  let currentTask = null;
+
+  for (const line of lines) {
+    // Match task headers: ### T1.1 or ### T1.1 (P) — description
+    const taskMatch = line.match(/^###\s+(T[\d.]+)/);
+    if (taskMatch) {
+      currentTask = taskMatch[1];
+      if (!graph.has(currentTask)) graph.set(currentTask, []);
+      continue;
+    }
+
+    // Match depends_on inside task block
+    if (currentTask) {
+      const depMatch = line.match(/depends_on:\s*\[([^\]]*)\]/);
+      if (depMatch) {
+        const deps = depMatch[1]
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        graph.set(currentTask, deps);
+      }
+    }
+  }
+
+  return graph;
+}
+
+function cmdNext() {
+  const flags = process.argv.slice(3);
+  const quick = flags.includes("--quick");
+
+  const sddDir = path.resolve(".sdd");
+  if (!fs.existsSync(sddDir)) {
+    console.log("E-000: No .sdd/ directory found. Run `spextral init` first.");
+    process.exit(1);
+  }
+
+  const config = loadSddConfig(sddDir);
+  const chain = config.chain;
+  const slugs = discoverSddState(sddDir);
+
+  if (slugs.length === 0) {
+    console.log("STATUS: empty");
+    console.log("NEXT: Run SDD_WAKE to start a new feature.");
+    return;
+  }
+
+  // Find the most active slug (most recent timestamp, or first non-archived)
+  let active = null;
+  for (const s of slugs) {
+    const statuses = Object.values(s.artifacts).map((a) => a.status).filter(Boolean);
+    if (statuses.some((st) => st !== "archived")) {
+      active = s;
+      break;
+    }
+  }
+
+  if (!active) {
+    console.log("STATUS: all_archived");
+    console.log("NEXT: All features archived. Run SDD_WAKE to start a new feature.");
+    return;
+  }
+
+  const a = active.artifacts;
+  const slug = active.slug;
+
+  // ── Quick mode: condensed fast-path ──
+  if (quick) {
+    console.log(`MODE: quick (autonomy_level: full — clarify and blocking_review auto-approved)`);
+    console.log(`SLUG: ${slug}`);
+
+    if (!a.CONTEXT) {
+      console.log("NEXT: Generate CONTEXT.md, SPEC.md (with REQ-N IDs), and PLAN.md (with depends_on + (P) markers) in a single pass.");
+      console.log("CONSTRAINTS: Preserve physical artifact files for fingerprint chain. Auto-approve clarify state.");
+      return;
+    }
+    if (!a.SPEC) {
+      console.log("NEXT: Generate SPEC.md (EARS format, REQ-N IDs) and PLAN.md in a single pass.");
+      console.log("CONSTRAINTS: Preserve physical files. Auto-approve clarify.");
+      return;
+    }
+    if (!a.PLAN) {
+      console.log("NEXT: Generate PLAN.md with task-to-REQ mapping and (P) markers.");
+      console.log("CONSTRAINTS: Run Goal-Backward Verification inline. Auto-approve.");
+      return;
+    }
+
+    // PLAN exists — validate and proceed to implement
+    const graph = extractTaskGraph(a.PLAN.body);
+    if (graph.size > 0) {
+      const { order, cycle } = topologicalSort(graph);
+      if (cycle) {
+        console.log(`E-603: Circular dependency detected in tasks: ${cycle.join(", ")}`);
+        process.exit(1);
+      }
+      console.log(`TASK_ORDER: ${order.join(" → ")}`);
+    }
+
+    console.log("NEXT: Execute sddkit-implement with autonomy_level: full, review_frequency: end_only. Atomic commits per task.");
+    return;
+  }
+
+  // ── Normal mode: step-by-step routing ──
+  console.log(`SLUG: ${slug}`);
+
+  // Route based on artifact state progression
+  if (!a.CONTEXT) {
+    console.log("STATUS: no_context");
+    console.log("NEXT: Generate CONTEXT.md with ## Decisions section ([LOCKED], [DISCRETION], [DEFERRED]).");
+    return;
+  }
+
+  if (!a.SPEC) {
+    console.log(`STATUS: context_${a.CONTEXT.status || "unknown"}`);
+    console.log("NEXT: Generate SPEC.md with EARS-format requirements and mandatory REQ-N identifiers.");
+    return;
+  }
+
+  if (a.SPEC.status === "draft") {
+    console.log("STATUS: spec_draft");
+    console.log("NEXT: Transition SPEC.md to clarify — run Adversarial Review for ambiguities, then await SDD_APPROVE.");
+    return;
+  }
+
+  if (a.SPEC.status === "clarify") {
+    console.log("STATUS: spec_clarify");
+    console.log("NEXT: Awaiting human response (SDD_APPROVE / SDD_MODIFY) to resolve clarification questions.");
+    return;
+  }
+
+  if (a.SPEC.status === "ready") {
+    console.log("STATUS: spec_ready");
+    console.log("NEXT: Run sddkit-validate on SPEC.md (structural + REQ-ID + context budget checks).");
+    return;
+  }
+
+  if (!a.PLAN) {
+    console.log("STATUS: spec_validated");
+    console.log("NEXT: Generate PLAN.md with task-to-REQ mapping, depends_on, and (P) parallelism markers.");
+    return;
+  }
+
+  if (a.PLAN.status === "draft") {
+    console.log("STATUS: plan_draft");
+    console.log("NEXT: Transition PLAN.md to clarify — run Goal-Backward Verification (every REQ covered?).");
+    return;
+  }
+
+  if (a.PLAN.status === "clarify") {
+    console.log("STATUS: plan_clarify");
+    console.log("NEXT: Awaiting human response (SDD_APPROVE / SDD_MODIFY) to confirm plan coverage.");
+    return;
+  }
+
+  if (a.PLAN.status === "ready") {
+    console.log("STATUS: plan_ready");
+    // Validate dependency graph before proceeding
+    const graph = extractTaskGraph(a.PLAN.body);
+    if (graph.size > 0) {
+      const { order, cycle } = topologicalSort(graph);
+      if (cycle) {
+        console.log(`E-603: Circular dependency detected in tasks: ${cycle.join(", ")}`);
+        process.exit(1);
+      }
+      console.log(`DEPENDENCY_ORDER: ${order.join(" → ")}`);
+    }
+    console.log("NEXT: Run sddkit-validate on PLAN.md, then sddkit-review (Devil-Advocate).");
+    return;
+  }
+
+  if (a.PLAN.status === "validated" || a.PLAN.status === "blocking_review") {
+    // Check progress
+    if (a.PROGRESS) {
+      const progressBody = a.PROGRESS.body || "";
+      const pending = (progressBody.match(/status:\s*pending/g) || []).length;
+      const inProgress = (progressBody.match(/status:\s*in_progress/g) || []).length;
+
+      if (pending === 0 && inProgress === 0) {
+        // All tasks done — route to next artifact in chain after PROGRESS
+        const progressIdx = chain.indexOf("PROGRESS");
+        const postProgress = chain.slice(progressIdx + 1);
+        for (const artName of postProgress) {
+          if (!a[artName]) {
+            const customDesc = config.custom_artifacts && config.custom_artifacts[artName];
+            const hint = customDesc ? ` — ${customDesc.description}` : "";
+            console.log(`STATUS: awaiting_${artName.toLowerCase()}`);
+            console.log(`NEXT: Generate ${artName}.md${hint}.`);
+            return;
+          }
+        }
+        console.log("STATUS: all_complete");
+        console.log("NEXT: Run sddkit-archive to move validated artifacts to .sdd/archive/.");
+        return;
+      }
+
+      console.log(`STATUS: implementing (${pending} pending, ${inProgress} in_progress)`);
+      console.log("NEXT: Continue sddkit-implement — execute next pending task with atomic commit.");
+      return;
+    }
+
+    console.log("STATUS: plan_validated");
+    console.log("NEXT: Begin sddkit-implement — create PROGRESS.md and start first task batch.");
+    return;
+  }
+
+  // Fallback
+  console.log(`STATUS: ${slug}_unknown`);
+  console.log("NEXT: Run sddkit-doctor to diagnose artifact state, then resume.");
+}
+
 // ── main ──────────────────────────────────────────────
 
 const command = process.argv[2];
@@ -347,14 +998,19 @@ switch (command) {
   case "update":
     cmdUpdate();
     break;
+  case "next":
+    cmdNext();
+    break;
   default:
     console.log(`
   Spextral — Spec-Driven Development Protocol for AI Agents
 
   Usage:
-    spextral init      Set up Spextral for your IDE/agent
-    spextral doctor    Validate .sdd/ structure and artifacts
-    spextral update    Fetch the latest spec from GitHub
+    spextral init            Set up Spextral for one or more AI agents
+    spextral doctor          Validate .sdd/ structure and artifacts
+    spextral update          Fetch the latest spec from GitHub
+    spextral next            Determine next logical step in the SDD workflow
+    spextral next --quick    Fast-path: condensed flow with full autonomy
 `);
     break;
 }
