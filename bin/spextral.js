@@ -259,7 +259,7 @@ async function askFeatures() {
 
     function repaint() {
       // Move up by the number of lines from the PREVIOUS render, then clear
-      process.stdout.write(`\x1b[${lastLineCount}A\x1b[J`);
+      process.stdout.write(`\x1b[${lastLineCount - 1}A\x1b[J`);
       const text = renderFeatures(cursor, selected, mode);
       lastLineCount = text.split("\n").length;
       process.stdout.write(text);
