@@ -388,20 +388,73 @@ async function askArtifacts() {
   const selected = new Set(preselected);
   let cursor = 0;
 
+  // Count display width using Intl.Segmenter for proper grapheme handling
+  function displayWidth(str) {
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      const seg = new Intl.Segmenter("en", { granularity: "grapheme" });
+      let w = 0;
+      for (const s of seg.segment(str)) {
+        const cp = s.segment.codePointAt(0);
+        // CJK, fullwidth, and emoji ranges = 2 columns
+        if (
+          (cp >= 0x1100 && cp <= 0x115F) || // Hangul Jamo
+          (cp >= 0x2329 && cp <= 0x232A) ||
+          (cp >= 0x2E80 && cp <= 0x303E) || // CJK Radicals
+          (cp >= 0x3040 && cp <= 0x33BF) || // CJK + Katakana + Bopomofo
+          (cp >= 0x3400 && cp <= 0x4DBF) || // CJK Ext A
+          (cp >= 0x4E00 && cp <= 0xA4CF) || // CJK Unified
+          (cp >= 0xAC00 && cp <= 0xD7AF) || // Hangul
+          (cp >= 0xF900 && cp <= 0xFAFF) || // CJK Compat
+          (cp >= 0xFE30 && cp <= 0xFE6F) || // CJK Forms
+          (cp >= 0xFF01 && cp <= 0xFF60) || // Fullwidth
+          (cp >= 0xFFE0 && cp <= 0xFFE6) || // Fullwidth sign
+          (cp >= 0x1F000 && cp <= 0x1FBFF)   // Emoji
+        ) {
+          w += 2;
+        } else {
+          w += 1;
+        }
+      }
+      return w;
+    }
+    // Fallback: string length
+    return str.length;
+  }
+
   function wrapText(text, maxLen) {
     const words = text.split(" ");
     const lines = [];
     let current = "";
     for (const word of words) {
-      if (current.length + word.length + 1 > maxLen) {
-        lines.push(current);
-        current = word;
+      const test = current ? current + " " + word : word;
+      if (displayWidth(test) > maxLen) {
+        if (current) lines.push(current);
+        // If single word is longer than maxLen, split it
+        if (displayWidth(word) > maxLen) {
+          let chunk = "";
+          for (const ch of word) {
+            if (displayWidth(chunk + ch) > maxLen) {
+              lines.push(chunk);
+              chunk = ch;
+            } else {
+              chunk += ch;
+            }
+          }
+          current = chunk;
+        } else {
+          current = word;
+        }
       } else {
-        current += (current ? " " : "") + word;
+        current = test;
       }
     }
     if (current) lines.push(current);
     return lines;
+  }
+
+  function padLine(line, maxLen) {
+    const diff = maxLen - displayWidth(line);
+    return diff > 0 ? " ".repeat(diff) : "";
   }
 
   function render(mode) {
@@ -429,33 +482,34 @@ async function askArtifacts() {
     // Details panel for currently hovered artifact
     if (mode === "select" && SDD_ARTIFACTS[cursor] && SDD_ARTIFACTS[cursor].details) {
       const artifact = SDD_ARTIFACTS[cursor];
-      const boxWidth = 72;
-      const innerWidth = boxWidth - 2;
+      const innerWidth = 68;
       const horizontal = "\u2500".repeat(innerWidth);
       lines.push("");
       lines.push(`  \u256d${horizontal}\u256e`);
-      lines.push(`  \u2502 Details: ${artifact.name}.md${" ".repeat(Math.max(0, innerWidth - 11 - artifact.name.length))}\u2502`);
+
+      // Title line
+      const titleText = ` Details: ${artifact.name}.md`;
+      lines.push(`  \u2502${titleText}${padLine(titleText, innerWidth)}\u2502`);
+      lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
 
       // Beginner section
-      const beginnerTitle = "\ud83d\udc68\u200d\ud83d\udcbb For beginners: ";
-      const beginnerFull = beginnerTitle + artifact.details.beginner;
-      const beginnerLines = wrapText(beginnerFull, innerWidth - 2);
+      const beginnerLabel = " 👨‍💻 For beginners: ";
+      const beginnerLines = wrapText(beginnerLabel + artifact.details.beginner, innerWidth - 1);
       beginnerLines.forEach((line, i) => {
-        const pad = i === 0 ? 1 : beginnerTitle.length;
-        const prefix = i === 0 ? "" : " ".repeat(pad);
-        lines.push(`  \u2502 ${prefix}${line}${" ".repeat(Math.max(0, innerWidth - 1 - prefix.length - line.length))}\u2502`);
+        const prefix = i === 0 ? " " : " ".repeat(displayWidth(beginnerLabel));
+        const fullLine = prefix + line;
+        lines.push(`  \u2502${fullLine}${padLine(fullLine, innerWidth)}\u2502`);
       });
 
       lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
 
       // Expert section
-      const expertTitle = "\ud83e\udde0 For experts: ";
-      const expertFull = expertTitle + artifact.details.expert;
-      const expertLines = wrapText(expertFull, innerWidth - 2);
+      const expertLabel = " 🧠 For experts: ";
+      const expertLines = wrapText(expertLabel + artifact.details.expert, innerWidth - 1);
       expertLines.forEach((line, i) => {
-        const pad = i === 0 ? 1 : expertTitle.length;
-        const prefix = i === 0 ? "" : " ".repeat(pad);
-        lines.push(`  \u2502 ${prefix}${line}${" ".repeat(Math.max(0, innerWidth - 1 - prefix.length - line.length))}\u2502`);
+        const prefix = i === 0 ? " " : " ".repeat(displayWidth(expertLabel));
+        const fullLine = prefix + line;
+        lines.push(`  \u2502${fullLine}${padLine(fullLine, innerWidth)}\u2502`);
       });
 
       lines.push(`  \u2570${horizontal}\u256f`);
