@@ -19,7 +19,7 @@ Spextral is an IDE-agnostic protocol for Spec-Driven Development (SDD). It gives
 ## Workflow
 
 ```
-init → SDD_WAKE → spec → validate → review → plan → validate → implement → checkpoint → done
+init → SDD_WAKE → spec → clarify → validate → review → plan → clarify → validate → implement → test → security → archive
 ```
 
 1. **`npx spextral init`** — Sets up `.sdd/` and installs the protocol spec for your IDE
@@ -57,8 +57,40 @@ Also creates `.sdd/`, `.sdd/archive/`, and IDE exclusion files (`.cursorignore`,
 Validates your `.sdd/` structure:
 
 - Checks fingerprints (non-blank char count, LF-normalized, post-frontmatter)
-- Verifies artifact chains (`previous_artifact` / `next_artifact` exist)
-- Validates statuses against the SDD state machine (`draft`, `ready`, `validated`, `blocking_review`, `fingerprint_mismatch`, `checkpointed`, `archived`)
+- Verifies artifact chain integrity against `.sdd/config.json`
+- Validates statuses against the SDD state machine (`draft`, `clarify`, `ready`, `validated`, `blocking_review`, `fingerprint_mismatch`, `checkpointed`, `archived`)
+
+### `spextral next`
+
+Determines the next logical step in the SDD workflow by reading artifact state from `.sdd/`. Outputs routing instructions to `stdout` — no temporary files created.
+
+- Reads frontmatters from all artifacts in the active slug
+- Routes based on artifact progression: CONTEXT → SPEC → PLAN → IMPLEMENT → TEST → SECURITY → ARCHIVE
+- Validates the dependency graph using **topological sort** (Kahn's algorithm, O(V+E))
+- Emits `E-603` and exits with code 1 if circular dependencies are detected
+
+```bash
+spextral next
+# SLUG: my-feature
+# STATUS: spec_validated
+# NEXT: Generate PLAN.md with task-to-REQ mapping, depends_on, and (P) parallelism markers.
+```
+
+#### `spextral next --quick`
+
+Fast-path mode for experienced users. Emits instructions for the agent to generate condensed artifacts (SPEC+PLAN) in a single pass with full autonomy.
+
+- Implicitly sets `autonomy_level: full` — the `clarify` state and `blocking_review` pauses are auto-approved
+- Preserves physical artifact files for the fingerprint chain (no shortcuts on immutability)
+- Validates the dependency graph before routing to implementation
+
+```bash
+spextral next --quick
+# MODE: quick (autonomy_level: full — clarify and blocking_review auto-approved)
+# SLUG: my-feature
+# TASK_ORDER: T1.1 → T1.2 → T2.1 → T2.2
+# NEXT: Execute sddkit-implement with autonomy_level: full, review_frequency: end_only. Atomic commits per task.
+```
 
 ### `spextral update`
 
