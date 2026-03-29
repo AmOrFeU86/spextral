@@ -115,17 +115,20 @@ const SDD_ARTIFACTS = [
 
 const SDD_SKILLS = {
   "sdd-wake": {
-    description: "Activate the SDD protocol and discover current project state",
+    description:
+      "TRIGGER when: user wants to start a new feature, build something new, add functionality, or says 'nueva feature', 'new feature', 'quiero añadir', 'let\\'s build', 'next task', 'SDD_WAKE'. Activates the SDD spec-driven development protocol and discovers project state.",
     prompt:
-      "Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity, perform capabilities handshake, and report status with a suggested next action.",
+      "Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity using .sdd/config.json, perform capabilities handshake, and report status with a suggested next action.",
   },
   "sdd-next": {
-    description: "Determine the next step in the SDD workflow",
+    description:
+      "TRIGGER when: user asks what to do next, wants to continue work, or says 'next step', 'what now', 'siguiente paso'. Determines the next step in the SDD workflow.",
     prompt:
       "Analyze the current .sdd/ artifacts and their statuses to determine the next logical step in the SDD workflow. Report the current state, dependency order if applicable, and the recommended action.",
   },
   "sdd-status": {
-    description: "Show current SDD project status and progress",
+    description:
+      "TRIGGER when: user asks about project status, progress, or says 'how is it going', 'status', 'como va'. Shows current SDD project status and progress.",
     prompt:
       "Run SDD_STATUS. For each project slug in .sdd/, report: artifact states, progress percentage (completed/total tasks), any blocking issues, and current capabilities.",
   },
