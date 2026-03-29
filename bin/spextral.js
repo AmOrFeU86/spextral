@@ -457,57 +457,84 @@ async function askArtifacts() {
     return diff > 0 ? " ".repeat(diff) : "";
   }
 
+  // ANSI colors
+  const c = {
+    title: "\x1b[1;36m",      // bold cyan
+    selected: "\x1b[32m",     // green
+    unselected: "\x1b[90m",   // gray
+    cursor: "\x1b[1;33m",     // bold yellow
+    required: "\x1b[33m",     // yellow
+    optional: "\x1b[90m",     // gray
+    chain: "\x1b[35m",        // magenta
+    border: "\x1b[34m",       // blue
+    label: "\x1b[1;36m",      // bold cyan
+    desc: "\x1b[0m",          // reset
+    reset: "\x1b[0m",
+  };
+
   function render(mode) {
     const lines = [];
     lines.push("");
-    lines.push("  Spextral \u2014 Spec-Driven Development Protocol");
+    lines.push(`  ${c.title}Spextral — Spec-Driven Development Protocol${c.reset}`);
     lines.push("");
     lines.push("  Seleciona los archivos SDD para inicializar:");
     lines.push("");
     SDD_ARTIFACTS.forEach((a, i) => {
-      const checked = selected.has(a.name) ? "x" : " ";
+      const isSelected = selected.has(a.name);
+      const isCurrentRow = i === cursor;
+      const checkColor = isSelected ? c.selected : c.unselected;
+      const checked = isSelected ? "x" : " ";
+      const tagColor = a.required ? c.required : c.optional;
       const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
-      const pointer = i === cursor ? ">" : " ";
+      const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
+      const nameColor = isSelected ? c.selected : c.reset;
       const shortDesc = a.shortDesc || a.description;
       lines.push(
-        `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  \u2014 ${shortDesc}`
+        `  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${nameColor}${a.name}.md${c.reset}${tagColor}${tag}${c.reset}  — ${shortDesc}`
       );
     });
     const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
       .map((a) => a.name)
-      .join(" \u2192 ");
+      .join(` ${c.chain}→${c.reset} `);
     lines.push("");
-    lines.push(`  Chain: ${chain}`);
+    lines.push(`  Chain: ${c.chain}${chain}${c.reset}`);
 
     // Details panel for currently hovered artifact
     if (mode === "select" && SDD_ARTIFACTS[cursor] && SDD_ARTIFACTS[cursor].details) {
       const artifact = SDD_ARTIFACTS[cursor];
       const innerWidth = 60;
-      const horizontal = "\u2500".repeat(innerWidth);
+      const h = "\u2500".repeat(innerWidth);
+      const horizontal = `${c.border}${h}${c.reset}`;
+      const v = `${c.border}\u2502${c.reset}`;
+      const tl = `${c.border}\u256d${c.reset}`;
+      const tr = `${c.border}\u256e${c.reset}`;
+      const bl = `${c.border}\u2570${c.reset}`;
+      const br = `${c.border}\u256f${c.reset}`;
       lines.push("");
-      lines.push(`  \u256d${horizontal}\u256e`);
-      lines.push(`  \u2502 Details: ${artifact.name}.md${padLine(" Details: " + artifact.name + ".md", innerWidth)}\u2502`);
-      lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
+      lines.push(`  ${tl}${h}${tr}`);
+      lines.push(`  ${v} ${c.label}Details:${c.reset} ${artifact.name}.md${padLine(" Details: " + artifact.name + ".md", innerWidth)}${v}`);
+
+      lines.push(`  ${v}${" ".repeat(innerWidth)}${v}`);
 
       // Beginner section - label on its own line, then description
       const beginnerLabel = "\ud83d\udc68\u200d\ud83d\udcbb For beginners:";
-      lines.push(`  \u2502 ${beginnerLabel}${padLine(" " + beginnerLabel, innerWidth)}\u2502`);
+      lines.push(`  ${v} ${c.label}${beginnerLabel}${c.reset}${padLine(" " + beginnerLabel, innerWidth)}${v}`);
       const beginnerLines = wrapText(artifact.details.beginner, innerWidth - 2);
       beginnerLines.forEach(line => {
-        lines.push(`  \u2502 ${line}${padLine(" " + line, innerWidth)}\u2502`);
+        lines.push(`  ${v} ${line}${padLine(" " + line, innerWidth)}${v}`);
       });
 
-      lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
+      lines.push(`  ${v}${" ".repeat(innerWidth)}${v}`);
 
       // Expert section - label on its own line, then description
       const expertLabel = "\ud83e\udde0 For experts:";
-      lines.push(`  \u2502 ${expertLabel}${padLine(" " + expertLabel, innerWidth)}\u2502`);
+      lines.push(`  ${v} ${c.label}${expertLabel}${c.reset}${padLine(" " + expertLabel, innerWidth)}${v}`);
       const expertLines = wrapText(artifact.details.expert, innerWidth - 2);
       expertLines.forEach(line => {
-        lines.push(`  \u2502 ${line}${padLine(" " + line, innerWidth)}\u2502`);
+        lines.push(`  ${v} ${line}${padLine(" " + line, innerWidth)}${v}`);
       });
 
-      lines.push(`  \u2570${horizontal}\u256f`);
+      lines.push(`  ${bl}${h}${br}`);
     }
 
     lines.push("");
