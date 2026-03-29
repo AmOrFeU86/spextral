@@ -1,4 +1,4 @@
-# Spextral — Spec-Driven Development Protocol (Version 2.4)
+# Spextral — Spec-Driven Development Protocol (Version 2.5)
 
 ## 1. Vision and Philosophy
 
@@ -193,10 +193,9 @@ Artifacts are organized in subdirectories per feature slug:
 ├── archive/                      # Archived artifacts (>7 days or >2 hops)
 │   └── INDEX.md                  # Index of archived artifacts with fingerprints
 ├── {slug}/
-│   ├── CONTEXT.md
-│   ├── SPEC.md
-│   ├── PLAN.md
-│   ├── PROGRESS.md
+│   ├── SPEC.md                   # Context + Decisions + Requirements (required)
+│   ├── PLAN.md                   # Task roadmap (required)
+│   ├── PROGRESS.md               # Execution tracking (optional)
 │   ├── VALIDATION.md
 │   ├── CHECKPOINT-{id}.md
 │   ├── REVIEW.md
@@ -214,22 +213,22 @@ The artifact chain is defined in `.sdd/config.json` as the single source of trut
 
 ```json
 {
-  "chain": ["CONTEXT", "SPEC", "PLAN", "PROGRESS", "GDPR", "TEST", "SECURITY"],
+  "chain": ["SPEC", "PLAN", "PROGRESS", "GDPR", "TEST", "SECURITY"],
   "custom_artifacts": {
     "GDPR": { "description": "GDPR compliance analysis and data processing inventory" }
   }
 }
 ```
 
-- **Required artifacts** (CONTEXT, SPEC, PLAN, PROGRESS) are always present and cannot be removed.
-- **Optional artifacts** (VALIDATION, CHECKPOINT, REVIEW, TEST, SECURITY) are included based on user selection during init.
+- **Required artifacts** (SPEC, PLAN) are always present and cannot be removed.
+- **Optional artifacts** (PROGRESS, VALIDATION, CHECKPOINT, REVIEW, TEST, SECURITY) are included based on user selection during init.
 - **Custom artifacts** can be added during init for domain-specific needs (e.g. GDPR, DEPLOYMENT, MIGRATION). Their description is stored in `custom_artifacts` so agents know what to generate.
 - The chain order determines the routing logic for `spextral next` and the handoff sequence between artifacts.
 - Agents MUST read `.sdd/config.json` to determine the next artifact in the chain instead of relying on frontmatter fields.
 
 ### Decision Fidelity
 
-Every `CONTEXT.md` (or `SPEC.md`, if no CONTEXT exists) MUST include a `## Decisions` section. Each decision is tagged with one of these labels:
+Every `SPEC.md` MUST include a `## Decisions` section. Each decision is tagged with one of these labels:
 
 | Tag | Meaning | Agent Behavior |
 |-----|---------|----------------|
@@ -255,7 +254,7 @@ Every `CONTEXT.md` (or `SPEC.md`, if no CONTEXT exists) MUST include a `## Decis
 - **Required Capabilities:** `FileWrite`
 - **Initialization Protocol:**
   1. Create `.sdd/` and `.sdd/archive/` structure.
-  2. Generate seed artifacts: `{slug}/CONTEXT.md` (empty template).
+  2. Generate seed artifacts: `{slug}/SPEC.md` (empty template with Context, Decisions, and Requirements sections).
   3. **Create exclusion rules for IDEs** that auto-vectorize or index the workspace:
      - `.cursorignore`: add `.sdd/archive/**` (Cursor)
      - `.copilotignore`: add `.sdd/archive/**` (GitHub Copilot)
@@ -271,7 +270,7 @@ Every `CONTEXT.md` (or `SPEC.md`, if no CONTEXT exists) MUST include a `## Decis
 **Required (Minimalist):**
 ```yaml
 ---
-sdd_version: "2.4.0"
+sdd_version: "2.5.0"
 project_slug: "myapp"
 artifact_type: "SPEC"
 timestamp: "2024-01-15T10:30:00Z"
@@ -306,7 +305,6 @@ Each artifact type declares its natural successor in the SDD chain. Agents MUST 
 
 | Current Artifact | handoff.next_action | handoff.prompt_hint |
 |------------------|---------------------|---------------------|
-| CONTEXT.md | sddkit-spec | Generate SPEC.md with EARS requirements and REQ-N identifiers |
 | SPEC.md | sddkit-plan | Generate PLAN.md with task-to-REQ mapping and depends_on |
 | PLAN.md | sddkit-implement | Begin implementation following dependency order |
 | PROGRESS.md (all done) | sddkit-test | Generate and execute unit tests |
@@ -489,7 +487,7 @@ This guarantees the fingerprint is identical regardless of operating system, and
 ```yaml
 # TEST.md frontmatter
 ---
-sdd_version: "2.4.0"
+sdd_version: "2.5.0"
 project_slug: "{slug}"
 artifact_type: "TEST"
 timestamp: "2026-01-15T10:30:00Z"
@@ -533,7 +531,7 @@ test_summary:
 ```yaml
 # SECURITY.md frontmatter
 ---
-sdd_version: "2.4.0"
+sdd_version: "2.5.0"
 project_slug: "{slug}"
 artifact_type: "SECURITY"
 timestamp: "2026-01-15T10:30:00Z"
@@ -639,8 +637,7 @@ To prevent LLM context degradation ("lost in the middle" effect), artifacts SHOU
 
 | Artifact | Max Lines | Rationale |
 |----------|-----------|-----------|
-| `CONTEXT.md` | ~100 | Only high-level context and decisions. |
-| `SPEC.md` | ~250 | Forces modularization into smaller features. |
+| `SPEC.md` | ~300 | Context + Decisions + Requirements combined. Forces modularization into smaller features. |
 | `PLAN.md` | ~200 | Tasks should be granular, not encyclopedic. |
 | `PROGRESS.md` | ~150 | Completed tasks auto-collapse (see §6). |
 | `REVIEW.md` | ~150 | Focus on blocking/warning findings only. |
@@ -702,6 +699,14 @@ Practical case: "REST API":
 ---
 
 ## CHANGELOG
+
+### v2.5.0
+- **Artifact Fatigue Reduction:** Simplified entry barrier from 4 required artifacts to 2 (SPEC, PLAN)
+- **CONTEXT absorbed into SPEC:** All project context, decisions, and requirements now live in a single file
+- **PROGRESS is now optional:** Optimized for one-shot tasks; recommended for long sessions or autonomous agent workflows
+- **No separate DECISIONS.md:** Technical decisions live as rules within SPEC.md's `## Decisions` section
+- Updated artifact chain: SPEC → PLAN → [optional: PROGRESS, VALIDATION, CHECKPOINT, REVIEW, TEST, SECURITY]
+- Increased SPEC.md context budget from ~250 to ~300 lines to accommodate merged content
 
 ### v2.3.0
 - **Decision Fidelity:** `CONTEXT.md` now requires a `## Decisions` section with `[LOCKED]`, `[DISCRETION]`, `[DEFERRED]` tags

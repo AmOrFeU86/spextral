@@ -138,7 +138,7 @@ async function run() {
     // Step 2: Request a simple feature
     console.log("\n  Step 2: Request feature (this may take a few minutes)\n");
     const featureText = await runQuery(
-      'slug: calculator. Description: a Python script calculator.py with a function add(a, b) that returns a + b, and prints add(2, 3) when run directly. Apply SDD_APPROVE_ALL to skip all reviews. Execute the full SDD flow: CONTEXT, SPEC, PLAN, IMPLEMENT. Put all artifacts in .sdd/calculator/ folder.',
+      'slug: calculator. Description: a Python script calculator.py with a function add(a, b) that returns a + b, and prints add(2, 3) when run directly. Apply SDD_APPROVE_ALL to skip all reviews. Execute the full SDD flow: SPEC, PLAN, IMPLEMENT. Put all artifacts in .sdd/calculator/ folder.',
       testDir,
       30
     );
@@ -166,7 +166,6 @@ async function run() {
       const artifacts = fs.readdirSync(slugPath);
       console.log(`  INFO  Artifacts: ${artifacts.join(", ")}\n`);
 
-      assert(artifacts.some((a) => a === "CONTEXT.md"), "CONTEXT.md exists");
       assert(artifacts.some((a) => a === "SPEC.md"), "SPEC.md exists");
       assert(artifacts.some((a) => a === "PLAN.md"), "PLAN.md exists");
 

@@ -104,23 +104,13 @@ const AGENT_REGISTRY = {
 
 const SDD_ARTIFACTS = [
   {
-    name: "CONTEXT",
-    required: true,
-    shortDesc: "🌍 The Big Picture",
-    description: "Project context and decisions",
-    details: {
-      beginner: "This tells the AI what your project is about. Example: 'This is an online shoe store. The design should be minimalist and use Tailwind CSS.' It sets the global rules and context so the AI doesn't have to guess or assume things.",
-      expert: "Contains Architecture Decision Records (ADRs), tech stack constraints, global naming conventions, and anti-patterns. It provides the high-level system boundaries and domain knowledge required by the LLM to make informed design choices without hallucinating frameworks."
-    }
-  },
-  {
     name: "SPEC",
     required: true,
-    shortDesc: "📜 The Strict Rules",
-    description: "Requirements (EARS format, REQ-N IDs)",
+    shortDesc: "🌍 The Big Picture & Strict Rules",
+    description: "Context, decisions, and requirements (EARS format, REQ-N IDs)",
     details: {
-      beginner: "The exact list of things the code needs to do. Example: 'The user must be able to log in with Google' or 'The cart must calculate a 21% tax.' If it is not written in this file, the AI should not build it.",
-      expert: "Granular software requirements specification (often in EARS format). Uses traceable IDs (REQ-01, REQ-02) to strictly bind the agent's output to a defined scope. It acts as a strict contract to completely prevent LLM 'scope creep'."
+      beginner: "This tells the AI what your project is about AND what it needs to do. Example: 'This is an online shoe store using Tailwind CSS. The user must be able to log in with Google.' All context, decisions, and requirements live here so the AI has a single source of truth.",
+      expert: "Combines Architecture Decision Records (ADRs), tech stack constraints, and granular requirements in EARS format with REQ-N IDs. Provides the high-level system boundaries, domain knowledge, and strict scope contract to prevent LLM hallucination and scope creep."
     }
   },
   {
@@ -135,12 +125,12 @@ const SDD_ARTIFACTS = [
   },
   {
     name: "PROGRESS",
-    required: true,
+    required: false,
     shortDesc: "💾 The Save State",
     description: "Execution status tracking",
     details: {
       beginner: "If you run out of AI credits or the chat window resets, this file acts as a save point. When you come back, the AI reads this file to remember exactly which task it was working on so it can resume perfectly.",
-      expert: "Persisted Finite State Machine (FSM) tracking. It operates as the agent's external long-term memory, mitigating context-window degradation. Using commands like `sdd-wake`, the LLM instantly recovers its 'Chain of Thought' cross-session."
+      expert: "Persisted Finite State Machine (FSM) tracking. It operates as the agent's external long-term memory, mitigating context-window degradation. Using commands like `sdd-wake`, the LLM instantly recovers its 'Chain of Thought' cross-session. Optional for one-shot tasks; recommended for long sessions or autonomous agent workflows."
     }
   },
   {
@@ -1043,7 +1033,7 @@ function loadSddConfig(sddDir) {
   const configPath = path.join(sddDir, "config.json");
   if (!fs.existsSync(configPath)) {
     // Fallback: default full chain for projects initialized before config.json
-    return { chain: ["CONTEXT", "SPEC", "PLAN", "PROGRESS", "VALIDATION", "CHECKPOINT", "REVIEW", "TEST", "SECURITY"] };
+    return { chain: ["SPEC", "PLAN", "PROGRESS", "VALIDATION", "CHECKPOINT", "REVIEW", "TEST", "SECURITY"] };
   }
   return JSON.parse(fs.readFileSync(configPath, "utf-8"));
 }
@@ -1159,14 +1149,9 @@ function cmdNext() {
     console.log(`MODE: quick (autonomy_level: full — clarify and blocking_review auto-approved)`);
     console.log(`SLUG: ${slug}`);
 
-    if (!a.CONTEXT) {
-      console.log("NEXT: Generate CONTEXT.md, SPEC.md (with REQ-N IDs), and PLAN.md (with depends_on + (P) markers) in a single pass.");
-      console.log("CONSTRAINTS: Preserve physical artifact files for fingerprint chain. Auto-approve clarify state.");
-      return;
-    }
     if (!a.SPEC) {
-      console.log("NEXT: Generate SPEC.md (EARS format, REQ-N IDs) and PLAN.md in a single pass.");
-      console.log("CONSTRAINTS: Preserve physical files. Auto-approve clarify.");
+      console.log("NEXT: Generate SPEC.md with context, decisions, and requirements (EARS format, REQ-N IDs) in a single pass.");
+      console.log("CONSTRAINTS: Include ## Context and ## Decisions sections. Auto-approve clarify state.");
       return;
     }
     if (!a.PLAN) {
@@ -1194,15 +1179,9 @@ function cmdNext() {
   console.log(`SLUG: ${slug}`);
 
   // Route based on artifact state progression
-  if (!a.CONTEXT) {
-    console.log("STATUS: no_context");
-    console.log("NEXT: Generate CONTEXT.md with ## Decisions section ([LOCKED], [DISCRETION], [DEFERRED]).");
-    return;
-  }
-
   if (!a.SPEC) {
-    console.log(`STATUS: context_${a.CONTEXT.status || "unknown"}`);
-    console.log("NEXT: Generate SPEC.md with EARS-format requirements and mandatory REQ-N identifiers.");
+    console.log("STATUS: no_spec");
+    console.log("NEXT: Generate SPEC.md with ## Context, ## Decisions ([LOCKED], [DISCRETION], [DEFERRED]), and EARS-format requirements with REQ-N identifiers.");
     return;
   }
 
