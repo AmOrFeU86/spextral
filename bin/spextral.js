@@ -296,16 +296,31 @@ function interactiveCheckbox({ title, items, preselected, footerFn, hint }) {
   let cursor = 0;
   let lastLineCount = 0;
 
+  // ANSI colors
+  const c = {
+    title: "\x1b[1;36m",      // bold cyan
+    cursor: "\x1b[1;33m",     // bold yellow
+    selected: "\x1b[32m",     // green
+    unselected: "\x1b[90m",   // gray
+    verified: "\x1b[32m",     // green
+    locked: "\x1b[33m",       // yellow
+    reset: "\x1b[0m",
+  };
+
   function render() {
     const lines = [];
     lines.push("");
-    lines.push(`  ${title}`);
+    lines.push(`  ${c.title}${title}${c.reset}`);
     lines.push("");
     items.forEach((item, i) => {
-      const checked = selected.has(item.key) ? "x" : " ";
-      const tag = item.locked ? " (required)" : "";
-      const pointer = i === cursor ? ">" : " ";
-      lines.push(`  ${pointer} ${i + 1}. [${checked}] ${item.label}${tag}`);
+      const isCurrentRow = i === cursor;
+      const isSelected = selected.has(item.key);
+      const checkColor = isSelected ? c.selected : c.unselected;
+      const checked = isSelected ? "x" : " ";
+      const tag = item.locked ? `${c.locked} (required)${c.reset}` : item.verified ? `${c.verified} — verified${c.reset}` : "";
+      const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
+      const labelColor = isSelected ? c.selected : c.reset;
+      lines.push(`  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${labelColor}${item.label}${c.reset}${tag}`);
     });
     if (footerFn) {
       lines.push("");
@@ -671,7 +686,8 @@ async function cmdInit() {
   const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
   const platformItems = choices.map(([key, val]) => ({
     key,
-    label: val.verified ? `${val.name}  — verified` : val.name,
+    label: val.name,
+    verified: val.verified || false,
   }));
 
   const selectedKeys = await interactiveCheckbox({
