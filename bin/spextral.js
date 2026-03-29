@@ -482,34 +482,29 @@ async function askArtifacts() {
     // Details panel for currently hovered artifact
     if (mode === "select" && SDD_ARTIFACTS[cursor] && SDD_ARTIFACTS[cursor].details) {
       const artifact = SDD_ARTIFACTS[cursor];
-      const innerWidth = 68;
+      const innerWidth = 60;
       const horizontal = "\u2500".repeat(innerWidth);
       lines.push("");
       lines.push(`  \u256d${horizontal}\u256e`);
-
-      // Title line
-      const titleText = ` Details: ${artifact.name}.md`;
-      lines.push(`  \u2502${titleText}${padLine(titleText, innerWidth)}\u2502`);
+      lines.push(`  \u2502 Details: ${artifact.name}.md${padLine(" Details: " + artifact.name + ".md", innerWidth)}\u2502`);
       lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
 
-      // Beginner section
-      const beginnerLabel = " 👨‍💻 For beginners: ";
-      const beginnerLines = wrapText(beginnerLabel + artifact.details.beginner, innerWidth - 1);
-      beginnerLines.forEach((line, i) => {
-        const prefix = i === 0 ? " " : " ".repeat(displayWidth(beginnerLabel));
-        const fullLine = prefix + line;
-        lines.push(`  \u2502${fullLine}${padLine(fullLine, innerWidth)}\u2502`);
+      // Beginner section - label on its own line, then description
+      const beginnerLabel = "\ud83d\udc68\u200d\ud83d\udcbb For beginners:";
+      lines.push(`  \u2502 ${beginnerLabel}${padLine(" " + beginnerLabel, innerWidth)}\u2502`);
+      const beginnerLines = wrapText(artifact.details.beginner, innerWidth - 2);
+      beginnerLines.forEach(line => {
+        lines.push(`  \u2502 ${line}${padLine(" " + line, innerWidth)}\u2502`);
       });
 
       lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
 
-      // Expert section
-      const expertLabel = " 🧠 For experts: ";
-      const expertLines = wrapText(expertLabel + artifact.details.expert, innerWidth - 1);
-      expertLines.forEach((line, i) => {
-        const prefix = i === 0 ? " " : " ".repeat(displayWidth(expertLabel));
-        const fullLine = prefix + line;
-        lines.push(`  \u2502${fullLine}${padLine(fullLine, innerWidth)}\u2502`);
+      // Expert section - label on its own line, then description
+      const expertLabel = "\ud83e\udde0 For experts:";
+      lines.push(`  \u2502 ${expertLabel}${padLine(" " + expertLabel, innerWidth)}\u2502`);
+      const expertLines = wrapText(artifact.details.expert, innerWidth - 2);
+      expertLines.forEach(line => {
+        lines.push(`  \u2502 ${line}${padLine(" " + line, innerWidth)}\u2502`);
       });
 
       lines.push(`  \u2570${horizontal}\u256f`);
