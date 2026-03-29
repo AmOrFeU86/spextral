@@ -164,14 +164,15 @@ function generateNativeSkills(agentKey, agent) {
       );
       console.log(`    Skill: ${skillPath}`);
     } else {
-      // skill format (Claude Code): .claude/skills/X.md
-      const filePath = path.join(agent.skills.dir, `${name}.md`);
-      ensureDir(path.dirname(filePath));
+      // skill format (Claude Code): .claude/skills/X/SKILL.md
+      const skillDir = path.join(agent.skills.dir, name);
+      const skillPath = path.join(skillDir, "SKILL.md");
+      ensureDir(skillDir);
       fs.writeFileSync(
-        filePath,
+        skillPath,
         `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${skill.prompt}\n`
       );
-      console.log(`    Skill: ${filePath}`);
+      console.log(`    Skill: ${skillPath}`);
     }
   }
 }
