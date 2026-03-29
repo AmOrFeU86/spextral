@@ -205,43 +205,42 @@ function appendIfMissing(filePath, line) {
   }
 }
 
-function renderArtifacts(cursor, selected, mode) {
-  const lines = [];
-  lines.push("");
-  lines.push("  Select SDD artifacts:");
-  lines.push("");
-  SDD_ARTIFACTS.forEach((a, i) => {
-    const checked = selected.has(a.name) ? "x" : " ";
-    const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
-    const pointer = i === cursor ? ">" : " ";
-    lines.push(
-      `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  — ${a.description}`
-    );
-  });
-  const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
-    .map((a) => a.name)
-    .join(" \u2192 ");
-  lines.push("");
-  lines.push(`  Chain: ${chain}`);
-  lines.push("");
-  if (mode === "reorder") {
-    lines.push("  \u2191/\u2193: move item | Enter: confirm position | Esc: cancel");
-  } else {
-    lines.push("  \u2191/\u2193: navigate | Space: toggle | A: add custom | M: move | Enter: confirm");
-  }
-  return lines.join("\n");
-}
-
-async function askArtifacts() {
-  const selected = new Set(
-    SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name)
-  );
-  const customArtifacts = {};
+/**
+ * Generic interactive checkbox UI.
+ * @param {object} opts
+ * @param {string} opts.title - Header text
+ * @param {Array<{key: string, label: string, locked?: boolean}>} opts.items - Selectable items
+ * @param {Set<string>} opts.preselected - Keys selected by default
+ * @param {string} [opts.footer] - Extra info line (e.g. chain preview). Receives selected Set, returns string.
+ * @param {string} [opts.hint] - Controls hint line
+ * @returns {Promise<string[]>} Selected keys in display order
+ */
+function interactiveCheckbox({ title, items, preselected, footerFn, hint }) {
+  const selected = new Set(preselected);
   let cursor = 0;
   let lastLineCount = 0;
 
-  // Initial render
-  const output = renderArtifacts(cursor, selected, "select");
+  function render() {
+    const lines = [];
+    lines.push("");
+    lines.push(`  ${title}`);
+    lines.push("");
+    items.forEach((item, i) => {
+      const checked = selected.has(item.key) ? "x" : " ";
+      const tag = item.locked ? " (required)" : "";
+      const pointer = i === cursor ? ">" : " ";
+      lines.push(`  ${pointer} ${i + 1}. [${checked}] ${item.label}${tag}`);
+    });
+    if (footerFn) {
+      lines.push("");
+      lines.push(`  ${footerFn(selected)}`);
+    }
+    lines.push("");
+    lines.push(`  ${hint || "\u2191/\u2193: navigate | Space: toggle | Enter: confirm"}`);
+    return lines.join("\n");
+  }
+
+  const output = render();
   lastLineCount = output.split("\n").length;
   process.stdout.write(output);
 
@@ -252,15 +251,102 @@ async function askArtifacts() {
     stdin.resume();
     stdin.setEncoding("utf-8");
 
-    let mode = "select"; // "select" | "reorder" | "add-name" | "add-desc"
+    function repaint() {
+      process.stdout.write(`\x1b[${lastLineCount - 1}A\x1b[J`);
+      const text = render();
+      lastLineCount = text.split("\n").length;
+      process.stdout.write(text);
+    }
+
+    function cleanup() {
+      stdin.setRawMode(wasRaw || false);
+      stdin.pause();
+      stdin.removeListener("data", onKey);
+    }
+
+    function onKey(key) {
+      if (key === "\x03") { cleanup(); process.exit(0); }
+      if (key === "\x1b[A") { if (cursor > 0) cursor--; repaint(); return; }
+      if (key === "\x1b[B") { if (cursor < items.length - 1) cursor++; repaint(); return; }
+      if (key === " ") {
+        const item = items[cursor];
+        if (item.locked) return;
+        if (selected.has(item.key)) selected.delete(item.key);
+        else selected.add(item.key);
+        repaint();
+        return;
+      }
+      if (key === "\r") {
+        cleanup();
+        process.stdout.write("\n");
+        resolve(items.filter((item) => selected.has(item.key)).map((item) => item.key));
+        return;
+      }
+    }
+
+    stdin.on("data", onKey);
+  });
+}
+
+async function askArtifacts() {
+  const items = SDD_ARTIFACTS.map((a) => ({
+    key: a.name,
+    label: `${a.name}.md  \u2014 ${a.description}`,
+    locked: a.required,
+  }));
+  const preselected = new Set(SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name));
+  const customArtifacts = {};
+  let lastLineCount = 0;
+
+  // Use custom rendering for artifact-specific features (add custom, move, chain preview)
+  const selected = new Set(preselected);
+  let cursor = 0;
+
+  function render(mode) {
+    const lines = [];
+    lines.push("");
+    lines.push("  Select SDD artifacts:");
+    lines.push("");
+    SDD_ARTIFACTS.forEach((a, i) => {
+      const checked = selected.has(a.name) ? "x" : " ";
+      const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
+      const pointer = i === cursor ? ">" : " ";
+      lines.push(
+        `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  \u2014 ${a.description}`
+      );
+    });
+    const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
+      .map((a) => a.name)
+      .join(" \u2192 ");
+    lines.push("");
+    lines.push(`  Chain: ${chain}`);
+    lines.push("");
+    if (mode === "reorder") {
+      lines.push("  \u2191/\u2193: move item | Enter: confirm position | Esc: cancel");
+    } else {
+      lines.push("  \u2191/\u2193: navigate | Space: toggle | A: add custom | M: move | Enter: confirm");
+    }
+    return lines.join("\n");
+  }
+
+  const output = render("select");
+  lastLineCount = output.split("\n").length;
+  process.stdout.write(output);
+
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf-8");
+
+    let mode = "select";
     let addBuffer = "";
     let addName = "";
-    let movingIdx = -1;
 
     function repaint() {
-      // Move up by the number of lines from the PREVIOUS render, then clear
       process.stdout.write(`\x1b[${lastLineCount - 1}A\x1b[J`);
-      const text = renderArtifacts(cursor, selected, mode);
+      const text = render(mode);
       lastLineCount = text.split("\n").length;
       process.stdout.write(text);
     }
@@ -279,153 +365,90 @@ async function askArtifacts() {
     }
 
     function onKey(key) {
-      // Ctrl+C
-      if (key === "\x03") {
-        cleanup();
-        process.exit(0);
-      }
+      if (key === "\x03") { cleanup(); process.exit(0); }
 
       // ── Add custom artifact: name input ──
       if (mode === "add-name") {
-        if (key === "\x1b") { // Esc
-          mode = "select";
-          repaint();
-          return;
-        }
-        if (key === "\r") { // Enter
+        if (key === "\x1b") { mode = "select"; repaint(); return; }
+        if (key === "\r") {
           const upper = addBuffer.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
           if (!upper || SDD_ARTIFACTS.some((a) => a.name === upper)) {
-            addBuffer = "";
-            mode = "select";
-            repaint();
-            return;
+            addBuffer = ""; mode = "select"; repaint(); return;
           }
-          addName = upper;
-          addBuffer = "";
-          mode = "add-desc";
+          addName = upper; addBuffer = ""; mode = "add-desc";
           process.stdout.write(`\x1b[2K\r  Description: `);
           return;
         }
-        if (key === "\x7f" || key === "\b") { // Backspace
+        if (key === "\x7f" || key === "\b") {
           addBuffer = addBuffer.slice(0, -1);
           process.stdout.write(`\x1b[2K\r  Artifact name: ${addBuffer}`);
           return;
         }
-        if (key.length === 1 && key >= " ") {
-          addBuffer += key;
-          process.stdout.write(key);
-        }
+        if (key.length === 1 && key >= " ") { addBuffer += key; process.stdout.write(key); }
         return;
       }
 
       // ── Add custom artifact: description input ──
       if (mode === "add-desc") {
-        if (key === "\x1b") { // Esc
-          mode = "select";
-          repaint();
-          return;
-        }
-        if (key === "\r") { // Enter
+        if (key === "\x1b") { mode = "select"; repaint(); return; }
+        if (key === "\r") {
           const desc = addBuffer || "Custom artifact";
           const artifact = { name: addName, required: false, description: desc, custom: true };
           SDD_ARTIFACTS.push(artifact);
           selected.add(addName);
           customArtifacts[addName] = { description: desc };
           cursor = SDD_ARTIFACTS.length - 1;
-          addBuffer = "";
-          mode = "select";
-          // Clear the input lines and repaint
+          addBuffer = ""; mode = "select";
           process.stdout.write(`\x1b[2A\x1b[J`);
-          const text = renderArtifacts(cursor, selected, mode);
+          const text = render(mode);
+          lastLineCount = text.split("\n").length;
           process.stdout.write(text);
           return;
         }
-        if (key === "\x7f" || key === "\b") { // Backspace
+        if (key === "\x7f" || key === "\b") {
           addBuffer = addBuffer.slice(0, -1);
           process.stdout.write(`\x1b[2K\r  Description: ${addBuffer}`);
           return;
         }
-        if (key.length === 1 && key >= " ") {
-          addBuffer += key;
-          process.stdout.write(key);
-        }
+        if (key.length === 1 && key >= " ") { addBuffer += key; process.stdout.write(key); }
         return;
       }
 
       // ── Reorder mode ──
       if (mode === "reorder") {
-        if (key === "\x1b[A" && cursor > 0) { // Up arrow — swap up
-          const item = SDD_ARTIFACTS[cursor];
+        if (key === "\x1b[A" && cursor > 0) {
           const target = cursor - 1;
-          if (SDD_ARTIFACTS[target].required) return; // Can't move above required
-          SDD_ARTIFACTS[cursor] = SDD_ARTIFACTS[target];
-          SDD_ARTIFACTS[target] = item;
-          cursor = target;
-          repaint();
-          return;
+          if (SDD_ARTIFACTS[target].required) return;
+          [SDD_ARTIFACTS[cursor], SDD_ARTIFACTS[target]] = [SDD_ARTIFACTS[target], SDD_ARTIFACTS[cursor]];
+          cursor = target; repaint(); return;
         }
-        if (key === "\x1b[B" && cursor < SDD_ARTIFACTS.length - 1) { // Down arrow — swap down
-          const item = SDD_ARTIFACTS[cursor];
+        if (key === "\x1b[B" && cursor < SDD_ARTIFACTS.length - 1) {
           const target = cursor + 1;
-          SDD_ARTIFACTS[cursor] = SDD_ARTIFACTS[target];
-          SDD_ARTIFACTS[target] = item;
-          cursor = target;
-          repaint();
-          return;
+          [SDD_ARTIFACTS[cursor], SDD_ARTIFACTS[target]] = [SDD_ARTIFACTS[target], SDD_ARTIFACTS[cursor]];
+          cursor = target; repaint(); return;
         }
-        if (key === "\r" || key === "\x1b") { // Enter or Esc — exit reorder
-          mode = "select";
-          repaint();
-          return;
-        }
+        if (key === "\r" || key === "\x1b") { mode = "select"; repaint(); return; }
         return;
       }
 
       // ── Select mode ──
-      // Arrow up
-      if (key === "\x1b[A") {
-        if (cursor > 0) cursor--;
-        repaint();
-        return;
-      }
-      // Arrow down
-      if (key === "\x1b[B") {
-        if (cursor < SDD_ARTIFACTS.length - 1) cursor++;
-        repaint();
-        return;
-      }
-      // Space — toggle
+      if (key === "\x1b[A") { if (cursor > 0) cursor--; repaint(); return; }
+      if (key === "\x1b[B") { if (cursor < SDD_ARTIFACTS.length - 1) cursor++; repaint(); return; }
       if (key === " ") {
         const artifact = SDD_ARTIFACTS[cursor];
         if (artifact.required) return;
-        if (selected.has(artifact.name)) {
-          selected.delete(artifact.name);
-        } else {
-          selected.add(artifact.name);
-        }
-        repaint();
-        return;
+        if (selected.has(artifact.name)) selected.delete(artifact.name);
+        else selected.add(artifact.name);
+        repaint(); return;
       }
-      // Enter — confirm
-      if (key === "\r") {
-        finish();
-        return;
-      }
-      // A — add custom
+      if (key === "\r") { finish(); return; }
       if (key === "a" || key === "A") {
-        // Print input prompts below the UI
         process.stdout.write(`\n  Artifact name: `);
-        addBuffer = "";
-        mode = "add-name";
-        return;
+        addBuffer = ""; mode = "add-name"; return;
       }
-      // M — move/reorder
       if (key === "m" || key === "M") {
-        const artifact = SDD_ARTIFACTS[cursor];
-        if (artifact.required) return; // Can't move required artifacts
-        mode = "reorder";
-        repaint();
-        return;
+        if (SDD_ARTIFACTS[cursor].required) return;
+        mode = "reorder"; repaint(); return;
       }
     }
 
@@ -436,36 +459,27 @@ async function askArtifacts() {
 // ── init ──────────────────────────────────────────────
 
 async function cmdInit() {
-  console.log("\n  Spextral — Spec-Driven Development Protocol\n");
+  console.log("\n  Spextral — Spec-Driven Development Protocol");
 
-  const choices = Object.entries(AGENT_REGISTRY);
-  console.log("  Which agent platform(s) are you using?\n");
-  console.log("    0) All agents");
-  choices.forEach(([key, val], i) => {
-    console.log(`    ${i + 1}) ${val.name}`);
+  const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
+  const platformItems = choices.map(([key, val]) => ({
+    key,
+    label: val.name,
+  }));
+
+  const selectedKeys = await interactiveCheckbox({
+    title: "Select agent platform(s):",
+    items: platformItems,
+    preselected: new Set(),
+    hint: "\u2191/\u2193: navigate | Space: toggle | Enter: confirm",
   });
 
-  const answer = await ask(`\n  Select (comma-separated, e.g. 1,3,5 or 0 for all): `);
-  const tokens = answer.split(",").map((s) => s.trim()).filter(Boolean);
-
-  let selected = [];
-  if (tokens.includes("0")) {
-    selected = choices.filter(([k]) => k !== "manual");
-  } else {
-    for (const t of tokens) {
-      const idx = parseInt(t, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= choices.length) {
-        console.error(`  Invalid selection: ${t}. Aborting.`);
-        process.exit(1);
-      }
-      selected.push(choices[idx]);
-    }
-  }
-
-  if (selected.length === 0) {
+  if (selectedKeys.length === 0) {
     console.error("  No agents selected. Aborting.");
     process.exit(1);
   }
+
+  const selected = selectedKeys.map((key) => [key, AGENT_REGISTRY[key]]);
 
   const specContent = fs.readFileSync(SPEC_SOURCE, "utf-8");
   const writtenDests = new Set();
