@@ -103,15 +103,96 @@ const AGENT_REGISTRY = {
 };
 
 const SDD_ARTIFACTS = [
-  { name: "CONTEXT",    required: true,  description: "Project context and decisions" },
-  { name: "SPEC",       required: true,  description: "Requirements (EARS format, REQ-N IDs)" },
-  { name: "PLAN",       required: true,  description: "Tasks with dependency graph" },
-  { name: "PROGRESS",   required: true,  description: "Execution status tracking" },
-  { name: "VALIDATION", required: false, description: "Validation report" },
-  { name: "CHECKPOINT", required: false, description: "Recovery points" },
-  { name: "REVIEW",     required: false, description: "Review notes (Devil-Advocate)" },
-  { name: "TEST",       required: false, description: "Test artifacts and results" },
-  { name: "SECURITY",   required: false, description: "Security analysis" },
+  {
+    name: "CONTEXT",
+    required: true,
+    shortDesc: "🌍 The Big Picture",
+    description: "Project context and decisions",
+    details: {
+      beginner: "This tells the AI what your project is about. Example: 'This is an online shoe store. The design should be minimalist and use Tailwind CSS.' It sets the global rules and context so the AI doesn't have to guess or assume things.",
+      expert: "Contains Architecture Decision Records (ADRs), tech stack constraints, global naming conventions, and anti-patterns. It provides the high-level system boundaries and domain knowledge required by the LLM to make informed design choices without hallucinating frameworks."
+    }
+  },
+  {
+    name: "SPEC",
+    required: true,
+    shortDesc: "📜 The Strict Rules",
+    description: "Requirements (EARS format, REQ-N IDs)",
+    details: {
+      beginner: "The exact list of things the code needs to do. Example: 'The user must be able to log in with Google' or 'The cart must calculate a 21% tax.' If it is not written in this file, the AI should not build it.",
+      expert: "Granular software requirements specification (often in EARS format). Uses traceable IDs (REQ-01, REQ-02) to strictly bind the agent's output to a defined scope. It acts as a strict contract to completely prevent LLM 'scope creep'."
+    }
+  },
+  {
+    name: "PLAN",
+    required: true,
+    shortDesc: "🗺️ The Roadmap",
+    description: "Tasks with dependency graph",
+    details: {
+      beginner: "A checklist that breaks a big feature into small, manageable steps (e.g., 1. Setup database → 2. Build API → 3. Create UI). It stops the AI from trying to code everything all at once and getting confused.",
+      expert: "A Directed Acyclic Graph (DAG) of execution tasks. It defines the optimal sequence of implementation so the LLM resolves underlying dependencies (like DB schemas or interfaces) before attempting to write upper-layer business logic."
+    }
+  },
+  {
+    name: "PROGRESS",
+    required: true,
+    shortDesc: "💾 The Save State",
+    description: "Execution status tracking",
+    details: {
+      beginner: "If you run out of AI credits or the chat window resets, this file acts as a save point. When you come back, the AI reads this file to remember exactly which task it was working on so it can resume perfectly.",
+      expert: "Persisted Finite State Machine (FSM) tracking. It operates as the agent's external long-term memory, mitigating context-window degradation. Using commands like `sdd-wake`, the LLM instantly recovers its 'Chain of Thought' cross-session."
+    }
+  },
+  {
+    name: "VALIDATION",
+    required: false,
+    shortDesc: "🔍 The Checker",
+    description: "Validation report",
+    details: {
+      beginner: "A final report where the AI double-checks if every single rule from SPEC.md was actually built and if it works as requested before calling the job 'done'.",
+      expert: "Automated heuristic validation report mapping code output back to REQ-N IDs. Serves as an audit trail ensuring the Pull Request strictly meets the acceptance criteria defined in the specification."
+    }
+  },
+  {
+    name: "CHECKPOINT",
+    required: false,
+    shortDesc: "⏪ The Time Machine",
+    description: "Recovery points",
+    details: {
+      beginner: "A fast backup taken right before the AI makes a massive or risky change to your files. If the AI breaks everything, this file helps you quickly undo the mess.",
+      expert: "Granular, Git-independent state snapshots. Crucial for agentic workflows where a rogue LLM iteration might destroy working logic; allows the agent to self-revert upon detecting a critical compilation or test failure."
+    }
+  },
+  {
+    name: "REVIEW",
+    required: false,
+    shortDesc: "🧐 The Critic",
+    description: "Review notes (Devil-Advocate)",
+    details: {
+      beginner: "Tells the AI to act like a strict senior programmer, looking for messy code, bad practices, or things that might run slowly in the future.",
+      expert: "A 'Devil's Advocate' prompt layer. Forces a separate LLM context stream to critically evaluate the generated code, pointing out cyclomatic complexity, code smells, tight coupling, or unoptimized loops."
+    }
+  },
+  {
+    name: "TEST",
+    required: false,
+    shortDesc: "🧪 The Lab",
+    description: "Test artifacts and results",
+    details: {
+      beginner: "Holds the instructions for automated tests. The AI writes code to test its own code, ensuring that fixing one thing today doesn't break another thing tomorrow.",
+      expert: "Test-Driven Development (TDD) harness definitions. Maps the unit and integration testing strategies, coverage thresholds, and mock data structures required to validate the business logic."
+    }
+  },
+  {
+    name: "SECURITY",
+    required: false,
+    shortDesc: "🛡️ The Bouncer",
+    description: "Security analysis",
+    details: {
+      beginner: "A security scan where the AI looks for places hackers could attack your app, like weak passwords, data leaks, or exposed database links.",
+      expert: "Static Application Security Testing (SAST) guidelines. Instructions for the agent to actively hunt for OWASP Top 10 vulnerabilities (e.g., SQLi, XSS, CSRF, insecure references) during the implementation phase."
+    }
+  },
 ];
 
 const SDD_SKILLS = {
@@ -307,17 +388,36 @@ async function askArtifacts() {
   const selected = new Set(preselected);
   let cursor = 0;
 
+  function wrapText(text, maxLen) {
+    const words = text.split(" ");
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      if (current.length + word.length + 1 > maxLen) {
+        lines.push(current);
+        current = word;
+      } else {
+        current += (current ? " " : "") + word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
   function render(mode) {
     const lines = [];
     lines.push("");
-    lines.push("  Select SDD artifacts:");
+    lines.push("  Spextral \u2014 Spec-Driven Development Protocol");
+    lines.push("");
+    lines.push("  Seleciona los archivos SDD para inicializar:");
     lines.push("");
     SDD_ARTIFACTS.forEach((a, i) => {
       const checked = selected.has(a.name) ? "x" : " ";
       const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
       const pointer = i === cursor ? ">" : " ";
+      const shortDesc = a.shortDesc || a.description;
       lines.push(
-        `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  \u2014 ${a.description}`
+        `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  \u2014 ${shortDesc}`
       );
     });
     const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
@@ -325,6 +425,42 @@ async function askArtifacts() {
       .join(" \u2192 ");
     lines.push("");
     lines.push(`  Chain: ${chain}`);
+
+    // Details panel for currently hovered artifact
+    if (mode === "select" && SDD_ARTIFACTS[cursor] && SDD_ARTIFACTS[cursor].details) {
+      const artifact = SDD_ARTIFACTS[cursor];
+      const boxWidth = 72;
+      const innerWidth = boxWidth - 2;
+      const horizontal = "\u2500".repeat(innerWidth);
+      lines.push("");
+      lines.push(`  \u256d${horizontal}\u256e`);
+      lines.push(`  \u2502 Details: ${artifact.name}.md${" ".repeat(Math.max(0, innerWidth - 11 - artifact.name.length))}\u2502`);
+
+      // Beginner section
+      const beginnerTitle = "\ud83d\udc68\u200d\ud83d\udcbb For beginners: ";
+      const beginnerFull = beginnerTitle + artifact.details.beginner;
+      const beginnerLines = wrapText(beginnerFull, innerWidth - 2);
+      beginnerLines.forEach((line, i) => {
+        const pad = i === 0 ? 1 : beginnerTitle.length;
+        const prefix = i === 0 ? "" : " ".repeat(pad);
+        lines.push(`  \u2502 ${prefix}${line}${" ".repeat(Math.max(0, innerWidth - 1 - prefix.length - line.length))}\u2502`);
+      });
+
+      lines.push(`  \u2502${" ".repeat(innerWidth)}\u2502`);
+
+      // Expert section
+      const expertTitle = "\ud83e\udde0 For experts: ";
+      const expertFull = expertTitle + artifact.details.expert;
+      const expertLines = wrapText(expertFull, innerWidth - 2);
+      expertLines.forEach((line, i) => {
+        const pad = i === 0 ? 1 : expertTitle.length;
+        const prefix = i === 0 ? "" : " ".repeat(pad);
+        lines.push(`  \u2502 ${prefix}${line}${" ".repeat(Math.max(0, innerWidth - 1 - prefix.length - line.length))}\u2502`);
+      });
+
+      lines.push(`  \u2570${horizontal}\u256f`);
+    }
+
     lines.push("");
     if (mode === "reorder") {
       lines.push("  \u2191/\u2193: move item | Enter: confirm position | Esc: cancel");
