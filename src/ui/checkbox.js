@@ -7,10 +7,11 @@ const c = require("./colors");
  * @param {Array<{key: string, label: string, locked?: boolean, verified?: boolean}>} opts.items
  * @param {Set<string>} opts.preselected - Keys selected by default
  * @param {function} [opts.footerFn] - Receives selected Set, returns string
+ * @param {string} [opts.subtitle] - Plain text line below the title
  * @param {string} [opts.hint] - Controls hint line
  * @returns {Promise<string[]>} Selected keys in display order
  */
-function interactiveCheckbox({ title, items, preselected, footerFn, hint }) {
+function interactiveCheckbox({ title, subtitle, items, preselected, footerFn, hint }) {
   const selected = new Set(preselected);
   let cursor = 0;
   let lastLineCount = 0;
@@ -20,6 +21,8 @@ function interactiveCheckbox({ title, items, preselected, footerFn, hint }) {
     lines.push("");
     lines.push(`  ${c.title}${title}${c.reset}`);
     lines.push("");
+    if (subtitle) lines.push(`  ${subtitle}`);
+    if (subtitle) lines.push("");
     items.forEach((item, i) => {
       const isCurrentRow = i === cursor;
       const isSelected = selected.has(item.key);

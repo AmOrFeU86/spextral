@@ -39,8 +39,6 @@ function generateNativeSkills(agent) {
 }
 
 async function cmdInit() {
-  console.log("\n  Spextral — Spec-Driven Development Protocol");
-
   const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
   const platformItems = choices.map(([key, val]) => ({
     key,
@@ -49,7 +47,8 @@ async function cmdInit() {
   }));
 
   const selectedKeys = await interactiveCheckbox({
-    title: "Select agent platform(s):",
+    title: "Spextral \u2014 Spec-Driven Development Protocol",
+    subtitle: "Select agent platform(s):",
     items: platformItems,
     preselected: new Set(),
     hint: "\u2191/\u2193: navigate | Space: toggle | Enter: confirm",

@@ -2,8 +2,15 @@ const { SDD_CATEGORIES, SDD_ARTIFACTS } = require("../constants");
 const { wrapText, padLine } = require("../utils");
 const c = require("./colors");
 
+// Build category label lookup
+const CATEGORY_LABELS = {};
+for (const cat of SDD_CATEGORIES) {
+  CATEGORY_LABELS[cat.id] = cat.label;
+}
+
 /**
  * Interactive artifact selection UI with details panel, custom artifacts, and reordering.
+ * Artifacts are displayed as a flat list — reordering works freely across categories.
  * @returns {Promise<{chain: string[], customArtifacts: object}>}
  */
 function askArtifacts() {
@@ -12,90 +19,47 @@ function askArtifacts() {
   const selected = new Set(SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name));
   let cursor = 0;
 
-  function getArtifactAt(flatIdx) {
-    let idx = 0;
-    for (const cat of SDD_CATEGORIES) {
-      const catArtifacts = SDD_ARTIFACTS.filter((a) => (a.category || "quality") === cat.id);
-      for (const a of catArtifacts) {
-        if (idx === flatIdx) return a;
-        idx++;
-      }
-    }
-    const custom = SDD_ARTIFACTS.filter((a) => !a.category && a.custom);
-    for (const a of custom) {
-      if (idx === flatIdx) return a;
-      idx++;
-    }
-    return null;
-  }
-
-  function getTotalArtifactCount() {
-    return SDD_ARTIFACTS.length;
-  }
-
   function render(mode) {
     const lines = [];
     lines.push("");
-    lines.push(`  ${c.title}Spextral — Spec-Driven Development Protocol${c.reset}`);
+    lines.push(`  ${c.title}Spextral \u2014 Spec-Driven Development Protocol${c.reset}`);
     lines.push("");
     lines.push("  Select SDD artifacts to initialize:");
     lines.push("");
 
-    let flatIndex = 0;
-    SDD_CATEGORIES.forEach((cat) => {
-      const catArtifacts = SDD_ARTIFACTS.filter((a) => (a.category || "quality") === cat.id);
-      if (catArtifacts.length === 0) return;
+    SDD_ARTIFACTS.forEach((a, i) => {
+      const isSelected = selected.has(a.name);
+      const isCurrentRow = i === cursor;
+      const checkColor = isSelected ? c.selected : c.unselected;
+      const checked = isSelected ? "x" : " ";
+      const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
+      const nameColor = isSelected ? c.selected : c.reset;
+      const shortDesc = a.shortDesc || a.description;
 
-      const suffix = cat.suffix ? ` ${cat.suffix}` : "";
-      const header = `─── ${cat.label}${suffix} ${"\u2500".repeat(Math.max(0, 50 - cat.label.length - suffix.length))}`;
-      lines.push(`  ${c.border}${header}${c.reset}`);
+      // Tag: required, custom, or category
+      let tag = "";
+      if (a.required) {
+        tag = `${c.required} (required)${c.reset}`;
+      } else if (a.custom) {
+        tag = `${c.optional} (custom)${c.reset}`;
+      } else {
+        const catLabel = CATEGORY_LABELS[a.category] || "";
+        if (catLabel) tag = `${c.optional} [${catLabel}]${c.reset}`;
+      }
 
-      catArtifacts.forEach((a) => {
-        const i = flatIndex;
-        const isSelected = selected.has(a.name);
-        const isCurrentRow = i === cursor;
-        const checkColor = isSelected ? c.selected : c.unselected;
-        const checked = isSelected ? "x" : " ";
-        const tagColor = a.required ? c.required : c.optional;
-        const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
-        const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
-        const nameColor = isSelected ? c.selected : c.reset;
-        const shortDesc = a.shortDesc || a.description;
-        lines.push(
-          `  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${nameColor}${a.name}.md${c.reset}${tagColor}${tag}${c.reset}  — ${shortDesc}`
-        );
-        flatIndex++;
-      });
+      lines.push(
+        `  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${nameColor}${a.name}.md${c.reset}${tag}  \u2014 ${shortDesc}`
+      );
     });
-
-    const customList = SDD_ARTIFACTS.filter((a) => !a.category && a.custom);
-    if (customList.length > 0) {
-      const header = `\u2500\u2500\u2500 Custom ${"\u2500".repeat(55)}`;
-      lines.push(`  ${c.border}${header}${c.reset}`);
-      customList.forEach((a) => {
-        const i = flatIndex;
-        const isSelected = selected.has(a.name);
-        const isCurrentRow = i === cursor;
-        const checkColor = isSelected ? c.selected : c.unselected;
-        const checked = isSelected ? "x" : " ";
-        const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
-        const nameColor = isSelected ? c.selected : c.reset;
-        const shortDesc = a.shortDesc || a.description;
-        lines.push(
-          `  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${nameColor}${a.name}.md${c.reset}${c.optional} (custom)${c.reset}  — ${shortDesc}`
-        );
-        flatIndex++;
-      });
-    }
 
     const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
       .map((a) => a.name)
-      .join(` ${c.chain}→${c.reset} `);
+      .join(` ${c.chain}\u2192${c.reset} `);
     lines.push("");
     lines.push(`  Chain: ${c.chain}${chain}${c.reset}`);
 
     // Details panel for currently hovered artifact
-    const hoveredArtifact = getArtifactAt(cursor);
+    const hoveredArtifact = SDD_ARTIFACTS[cursor];
     if (mode === "select" && hoveredArtifact && hoveredArtifact.details) {
       const artifact = hoveredArtifact;
       const innerWidth = 60;
@@ -226,22 +190,15 @@ function askArtifacts() {
 
       // ── Reorder mode ──
       if (mode === "reorder") {
-        const currentArtifact = getArtifactAt(cursor);
         if (key === "\x1b[A" && cursor > 0) {
           const target = cursor - 1;
-          const targetArtifact = getArtifactAt(target);
-          if (targetArtifact.required) return;
-          const curIdx = SDD_ARTIFACTS.indexOf(currentArtifact);
-          const tgtIdx = SDD_ARTIFACTS.indexOf(targetArtifact);
-          [SDD_ARTIFACTS[curIdx], SDD_ARTIFACTS[tgtIdx]] = [SDD_ARTIFACTS[tgtIdx], SDD_ARTIFACTS[curIdx]];
+          if (SDD_ARTIFACTS[target].required) return;
+          [SDD_ARTIFACTS[cursor], SDD_ARTIFACTS[target]] = [SDD_ARTIFACTS[target], SDD_ARTIFACTS[cursor]];
           cursor = target; repaint(); return;
         }
-        if (key === "\x1b[B" && cursor < getTotalArtifactCount() - 1) {
+        if (key === "\x1b[B" && cursor < SDD_ARTIFACTS.length - 1) {
           const target = cursor + 1;
-          const targetArtifact = getArtifactAt(target);
-          const curIdx = SDD_ARTIFACTS.indexOf(currentArtifact);
-          const tgtIdx = SDD_ARTIFACTS.indexOf(targetArtifact);
-          [SDD_ARTIFACTS[curIdx], SDD_ARTIFACTS[tgtIdx]] = [SDD_ARTIFACTS[tgtIdx], SDD_ARTIFACTS[curIdx]];
+          [SDD_ARTIFACTS[cursor], SDD_ARTIFACTS[target]] = [SDD_ARTIFACTS[target], SDD_ARTIFACTS[cursor]];
           cursor = target; repaint(); return;
         }
         if (key === "\r" || key === "\x1b") { mode = "select"; repaint(); return; }
@@ -250,9 +207,9 @@ function askArtifacts() {
 
       // ── Select mode ──
       if (key === "\x1b[A") { if (cursor > 0) cursor--; repaint(); return; }
-      if (key === "\x1b[B") { if (cursor < getTotalArtifactCount() - 1) cursor++; repaint(); return; }
+      if (key === "\x1b[B") { if (cursor < SDD_ARTIFACTS.length - 1) cursor++; repaint(); return; }
       if (key === " ") {
-        const artifact = getArtifactAt(cursor);
+        const artifact = SDD_ARTIFACTS[cursor];
         if (artifact.required) return;
         if (selected.has(artifact.name)) selected.delete(artifact.name);
         else selected.add(artifact.name);
@@ -264,7 +221,7 @@ function askArtifacts() {
         addBuffer = ""; mode = "add-name"; return;
       }
       if (key === "m" || key === "M") {
-        if (getArtifactAt(cursor).required) return;
+        if (SDD_ARTIFACTS[cursor].required) return;
         mode = "reorder"; repaint(); return;
       }
     }
