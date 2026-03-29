@@ -23,6 +23,7 @@ const VALID_STATES = [
 const AGENT_REGISTRY = {
   "claude-code": {
     name: "Claude Code",
+    verified: true,
     dest: "CLAUDE.md",
     isFile: true,
     skills: { dir: path.join(".claude", "skills"), format: "skill" },
@@ -468,7 +469,7 @@ async function cmdInit() {
   const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
   const platformItems = choices.map(([key, val]) => ({
     key,
-    label: val.name,
+    label: val.verified ? `${val.name}  — verified` : val.name,
   }));
 
   const selectedKeys = await interactiveCheckbox({
