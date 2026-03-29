@@ -311,20 +311,7 @@ Each artifact type declares its natural successor in the SDD chain. Agents MUST 
 | TEST.md | sddkit-security | Run static security analysis |
 | SECURITY.md | sddkit-archive | Archive validated artifacts |
 
-Agents MAY include handoff metadata in artifact frontmatter for explicit routing (see `handoff` field in the Optional example above). When the agent completes an artifact and transitions it to `validated`, it MUST read the handoff table to suggest or automatically execute the next action (depending on `autonomy_level`).
-
-### Auto-Continuation Rule (Mandatory)
-
-After completing ANY artifact (implementation, test, security, or custom), the agent MUST NOT stop. Instead, it MUST:
-
-1. Run `spextral next` (or read `.sdd/config.json` chain) to determine the next pending artifact.
-2. If `STATUS` is NOT `all_complete`, immediately execute the suggested action (generate the next artifact).
-3. Repeat steps 1-2 until `spextral next` returns `STATUS: all_complete`.
-4. Only then proceed to `sddkit-archive`.
-
-This applies to ALL artifacts in the chain, including custom artifacts. The agent treats custom artifacts the same as standard ones — it reads the description from `config.custom_artifacts` and generates the artifact accordingly. For custom artifacts that require code changes (e.g., adding comments, headers, or modifications), the agent MUST apply those changes to the source code AND generate the corresponding `{slug}/{ARTIFACT}.md` documenting what was done.
-
-**The agent MUST NOT consider a feature complete until every artifact in the chain has been generated and validated.**
+Agents MAY include handoff metadata in artifact frontmatter for explicit routing (see `handoff` field in the Optional example above). When the agent completes an artifact and transitions it to `validated`, it SHOULD read the handoff table to suggest or automatically execute the next action (depending on `autonomy_level`).
 
 ### Normalized Fingerprints
 
@@ -473,7 +460,6 @@ This guarantees the fingerprint is identical regardless of operating system, and
      > **Note:** If `CommandExec` is not available, the Agent documents the suggested commit message in PROGRESS.md for the user to execute manually.
   7. Show diff or summary to the user.
   8. Update `{slug}/PROGRESS.md`.
-  9. **Post-Implementation Continuation:** When all tasks reach `done` status (0 pending, 0 in_progress), the agent MUST NOT stop. It MUST run `spextral next` and execute the next artifact in the chain automatically. This loop continues until `STATUS: all_complete`. See §3 Auto-Continuation Rule.
 
 ### sddkit-test (Unit Testing)
 
