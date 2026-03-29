@@ -205,10 +205,10 @@ function appendIfMissing(filePath, line) {
   }
 }
 
-function renderFeatures(cursor, selected, mode) {
+function renderArtifacts(cursor, selected, mode) {
   const lines = [];
   lines.push("");
-  lines.push("  Select SDD features:");
+  lines.push("  Select SDD artifacts:");
   lines.push("");
   SDD_ARTIFACTS.forEach((a, i) => {
     const checked = selected.has(a.name) ? "x" : " ";
@@ -232,7 +232,7 @@ function renderFeatures(cursor, selected, mode) {
   return lines.join("\n");
 }
 
-async function askFeatures() {
+async function askArtifacts() {
   const selected = new Set(
     SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name)
   );
@@ -241,7 +241,7 @@ async function askFeatures() {
   let lastLineCount = 0;
 
   // Initial render
-  const output = renderFeatures(cursor, selected, "select");
+  const output = renderArtifacts(cursor, selected, "select");
   lastLineCount = output.split("\n").length;
   process.stdout.write(output);
 
@@ -260,7 +260,7 @@ async function askFeatures() {
     function repaint() {
       // Move up by the number of lines from the PREVIOUS render, then clear
       process.stdout.write(`\x1b[${lastLineCount - 1}A\x1b[J`);
-      const text = renderFeatures(cursor, selected, mode);
+      const text = renderArtifacts(cursor, selected, mode);
       lastLineCount = text.split("\n").length;
       process.stdout.write(text);
     }
@@ -336,7 +336,7 @@ async function askFeatures() {
           mode = "select";
           // Clear the input lines and repaint
           process.stdout.write(`\x1b[2A\x1b[J`);
-          const text = renderFeatures(cursor, selected, mode);
+          const text = renderArtifacts(cursor, selected, mode);
           process.stdout.write(text);
           return;
         }
@@ -511,8 +511,8 @@ async function cmdInit() {
     generateNativeSkills(agentKey, agent);
   }
 
-  // Feature selection
-  const { chain, customArtifacts } = await askFeatures();
+  // Artifact selection
+  const { chain, customArtifacts } = await askArtifacts();
 
   // Create .sdd/ structure and config.json
   ensureDir(path.join(".sdd", "archive"));
