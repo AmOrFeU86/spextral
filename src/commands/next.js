@@ -142,12 +142,16 @@ function cmdNext() {
       if (pending === 0 && inProgress === 0) {
         const progressIdx = chain.indexOf("PROGRESS");
         const postProgress = chain.slice(progressIdx + 1);
+        const remaining = postProgress.filter((artName) => !a[artName]);
         for (const artName of postProgress) {
           if (!a[artName]) {
             const customDesc = config.custom_artifacts && config.custom_artifacts[artName];
             const hint = customDesc ? ` — ${customDesc.description}` : "";
             console.log(`STATUS: awaiting_${artName.toLowerCase()}`);
             console.log(`NEXT: Generate ${artName}.md${hint}.`);
+            if (remaining.length > 1) {
+              console.log(`REMAINING: ${remaining.length} artifacts pending in chain (${remaining.join(", ")}). Auto-continue after this one.`);
+            }
             return;
           }
         }
