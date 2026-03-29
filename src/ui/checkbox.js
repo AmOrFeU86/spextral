@@ -23,15 +23,19 @@ function interactiveCheckbox({ title, subtitle, items, preselected, footerFn, hi
     lines.push("");
     if (subtitle) lines.push(`  ${subtitle}`);
     if (subtitle) lines.push("");
+    const maxLabel = Math.max(...items.map((item) => item.label.length));
+    const numWidth = String(items.length).length;
     items.forEach((item, i) => {
       const isCurrentRow = i === cursor;
       const isSelected = selected.has(item.key);
       const checkColor = isSelected ? c.selected : c.unselected;
       const checked = isSelected ? "x" : " ";
-      const tag = item.locked ? `${c.locked} (required)${c.reset}` : item.verified ? `${c.verified} — verified${c.reset}` : "";
+      const tag = item.locked ? `${c.locked} (required)${c.reset}` : item.verified ? `${c.verified} \u2014 verified${c.reset}` : "";
       const pointer = isCurrentRow ? `${c.cursor}>${c.reset}` : " ";
       const labelColor = isSelected ? c.selected : c.reset;
-      lines.push(`  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${labelColor}${item.label}${c.reset}${tag}`);
+      const labelPad = " ".repeat(maxLabel - item.label.length);
+      const num = String(i + 1).padStart(numWidth);
+      lines.push(`  ${pointer} ${num}. [${checkColor}${checked}${c.reset}] ${labelColor}${item.label}${c.reset}${labelPad}  ${tag}`);
     });
     if (footerFn) {
       lines.push("");

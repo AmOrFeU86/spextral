@@ -27,6 +27,17 @@ function askArtifacts() {
     lines.push("  Select SDD artifacts to initialize:");
     lines.push("");
 
+    // Compute column widths for alignment
+    const maxName = Math.max(...SDD_ARTIFACTS.map((a) => `${a.name}.md`.length));
+    const tags = SDD_ARTIFACTS.map((a) => {
+      if (a.required) return "(required)";
+      if (a.custom) return "(custom)";
+      const catLabel = CATEGORY_LABELS[a.category] || "";
+      return catLabel ? `[${catLabel}]` : "";
+    });
+    const maxTag = Math.max(...tags.map((t) => t.length));
+    const numWidth = String(SDD_ARTIFACTS.length).length;
+
     SDD_ARTIFACTS.forEach((a, i) => {
       const isSelected = selected.has(a.name);
       const isCurrentRow = i === cursor;
@@ -36,19 +47,16 @@ function askArtifacts() {
       const nameColor = isSelected ? c.selected : c.reset;
       const shortDesc = a.shortDesc || a.description;
 
-      // Tag: required, custom, or category
-      let tag = "";
-      if (a.required) {
-        tag = `${c.required} (required)${c.reset}`;
-      } else if (a.custom) {
-        tag = `${c.optional} (custom)${c.reset}`;
-      } else {
-        const catLabel = CATEGORY_LABELS[a.category] || "";
-        if (catLabel) tag = `${c.optional} [${catLabel}]${c.reset}`;
-      }
+      const name = `${a.name}.md`;
+      const namePad = " ".repeat(maxName - name.length);
+      const tagText = tags[i];
+      const tagColor = a.required ? c.required : c.optional;
+      const tagColored = tagText ? `${tagColor}${tagText}${c.reset}` : "";
+      const tagPad = " ".repeat(maxTag - tagText.length);
+      const num = String(i + 1).padStart(numWidth);
 
       lines.push(
-        `  ${pointer} ${i + 1}. [${checkColor}${checked}${c.reset}] ${nameColor}${a.name}.md${c.reset}${tag}  \u2014 ${shortDesc}`
+        `  ${pointer} ${num}. [${checkColor}${checked}${c.reset}] ${nameColor}${name}${c.reset}${namePad}  ${tagColored}${tagPad}  \u2014 ${shortDesc}`
       );
     });
 
