@@ -205,149 +205,231 @@ function appendIfMissing(filePath, line) {
   }
 }
 
+function renderFeatures(cursor, selected, mode) {
+  const lines = [];
+  lines.push("");
+  lines.push("  Select SDD features:");
+  lines.push("");
+  SDD_ARTIFACTS.forEach((a, i) => {
+    const checked = selected.has(a.name) ? "x" : " ";
+    const tag = a.required ? " (required)" : a.custom ? " (custom)" : "";
+    const pointer = i === cursor ? ">" : " ";
+    lines.push(
+      `  ${pointer} ${i + 1}. [${checked}] ${a.name}.md${tag}  — ${a.description}`
+    );
+  });
+  const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
+    .map((a) => a.name)
+    .join(" \u2192 ");
+  lines.push("");
+  lines.push(`  Chain: ${chain}`);
+  lines.push("");
+  if (mode === "reorder") {
+    lines.push("  \u2191/\u2193: move item | Enter: confirm position | Esc: cancel");
+  } else {
+    lines.push("  \u2191/\u2193: navigate | Space: toggle | A: add custom | M: move | Enter: confirm");
+  }
+  return lines.join("\n");
+}
+
 async function askFeatures() {
   const selected = new Set(
     SDD_ARTIFACTS.filter((a) => a.required).map((a) => a.name)
   );
-
-  function display() {
-    console.log("\n  Select SDD features:\n");
-    SDD_ARTIFACTS.forEach((a, i) => {
-      const checked = selected.has(a.name) ? "x" : " ";
-      const tag = a.required ? " (required)" : "";
-      console.log(
-        `    ${i + 1}. [${checked}] ${a.name}.md${tag}  — ${a.description}`
-      );
-    });
-    const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name))
-      .map((a) => a.name)
-      .join(" → ");
-    console.log(`\n  Chain: ${chain}\n`);
-  }
-
-  display();
-
   const customArtifacts = {};
+  let cursor = 0;
 
-  while (true) {
-    const input = await ask(
-      "  Toggle number(s) | A: add custom | R: reorder | Enter: confirm: "
-    );
+  // Initial render
+  const output = renderFeatures(cursor, selected, "select");
+  process.stdout.write(output);
 
-    if (input === "") break;
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf-8");
 
-    if (input.toLowerCase() === "a") {
-      const name = await ask("  Artifact name (e.g. GDPR, DEPLOYMENT): ");
-      if (!name) continue;
-      const upper = name.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
-      if (!upper) {
-        console.log("  Invalid name.");
-        continue;
-      }
-      if (SDD_ARTIFACTS.some((a) => a.name === upper)) {
-        console.log(`  ${upper} already exists. Toggle it with its number.`);
-        continue;
-      }
-      const desc = await ask("  Description: ");
-      const artifact = { name: upper, required: false, description: desc || "Custom artifact", custom: true };
-      SDD_ARTIFACTS.push(artifact);
-      selected.add(upper);
-      customArtifacts[upper] = { description: artifact.description };
-      display();
-      continue;
+    let mode = "select"; // "select" | "reorder" | "add-name" | "add-desc"
+    let addBuffer = "";
+    let addName = "";
+    let movingIdx = -1;
+
+    function repaint() {
+      // Clear previous output and redraw
+      const text = renderFeatures(cursor, selected, mode);
+      const lineCount = text.split("\n").length;
+      // Move up and clear
+      process.stdout.write(`\x1b[${lineCount}A\x1b[J`);
+      process.stdout.write(text);
     }
 
-    if (input.toLowerCase() === "r") {
-      await reorderChain(selected);
-      display();
-      continue;
+    function cleanup() {
+      stdin.setRawMode(wasRaw || false);
+      stdin.pause();
+      stdin.removeListener("data", onKey);
     }
 
-    const nums = input.split(",").map((s) => s.trim()).filter(Boolean);
-    for (const n of nums) {
-      const idx = parseInt(n, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= SDD_ARTIFACTS.length) {
-        console.log(`  Invalid: ${n}`);
-        continue;
+    function finish() {
+      cleanup();
+      process.stdout.write("\n");
+      const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name)).map((a) => a.name);
+      resolve({ chain, customArtifacts });
+    }
+
+    function onKey(key) {
+      // Ctrl+C
+      if (key === "\x03") {
+        cleanup();
+        process.exit(0);
       }
-      const artifact = SDD_ARTIFACTS[idx];
-      if (artifact.required) {
-        console.log(`  ${artifact.name} is required and cannot be removed.`);
-        continue;
+
+      // ── Add custom artifact: name input ──
+      if (mode === "add-name") {
+        if (key === "\x1b") { // Esc
+          mode = "select";
+          repaint();
+          return;
+        }
+        if (key === "\r") { // Enter
+          const upper = addBuffer.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+          if (!upper || SDD_ARTIFACTS.some((a) => a.name === upper)) {
+            addBuffer = "";
+            mode = "select";
+            repaint();
+            return;
+          }
+          addName = upper;
+          addBuffer = "";
+          mode = "add-desc";
+          process.stdout.write(`\x1b[2K\r  Description: `);
+          return;
+        }
+        if (key === "\x7f" || key === "\b") { // Backspace
+          addBuffer = addBuffer.slice(0, -1);
+          process.stdout.write(`\x1b[2K\r  Artifact name: ${addBuffer}`);
+          return;
+        }
+        if (key.length === 1 && key >= " ") {
+          addBuffer += key;
+          process.stdout.write(key);
+        }
+        return;
       }
-      if (selected.has(artifact.name)) {
-        selected.delete(artifact.name);
-      } else {
-        selected.add(artifact.name);
+
+      // ── Add custom artifact: description input ──
+      if (mode === "add-desc") {
+        if (key === "\x1b") { // Esc
+          mode = "select";
+          repaint();
+          return;
+        }
+        if (key === "\r") { // Enter
+          const desc = addBuffer || "Custom artifact";
+          const artifact = { name: addName, required: false, description: desc, custom: true };
+          SDD_ARTIFACTS.push(artifact);
+          selected.add(addName);
+          customArtifacts[addName] = { description: desc };
+          cursor = SDD_ARTIFACTS.length - 1;
+          addBuffer = "";
+          mode = "select";
+          // Clear the input lines and repaint
+          process.stdout.write(`\x1b[2A\x1b[J`);
+          const text = renderFeatures(cursor, selected, mode);
+          process.stdout.write(text);
+          return;
+        }
+        if (key === "\x7f" || key === "\b") { // Backspace
+          addBuffer = addBuffer.slice(0, -1);
+          process.stdout.write(`\x1b[2K\r  Description: ${addBuffer}`);
+          return;
+        }
+        if (key.length === 1 && key >= " ") {
+          addBuffer += key;
+          process.stdout.write(key);
+        }
+        return;
+      }
+
+      // ── Reorder mode ──
+      if (mode === "reorder") {
+        if (key === "\x1b[A" && cursor > 0) { // Up arrow — swap up
+          const item = SDD_ARTIFACTS[cursor];
+          const target = cursor - 1;
+          if (SDD_ARTIFACTS[target].required) return; // Can't move above required
+          SDD_ARTIFACTS[cursor] = SDD_ARTIFACTS[target];
+          SDD_ARTIFACTS[target] = item;
+          cursor = target;
+          repaint();
+          return;
+        }
+        if (key === "\x1b[B" && cursor < SDD_ARTIFACTS.length - 1) { // Down arrow — swap down
+          const item = SDD_ARTIFACTS[cursor];
+          const target = cursor + 1;
+          SDD_ARTIFACTS[cursor] = SDD_ARTIFACTS[target];
+          SDD_ARTIFACTS[target] = item;
+          cursor = target;
+          repaint();
+          return;
+        }
+        if (key === "\r" || key === "\x1b") { // Enter or Esc — exit reorder
+          mode = "select";
+          repaint();
+          return;
+        }
+        return;
+      }
+
+      // ── Select mode ──
+      // Arrow up
+      if (key === "\x1b[A") {
+        if (cursor > 0) cursor--;
+        repaint();
+        return;
+      }
+      // Arrow down
+      if (key === "\x1b[B") {
+        if (cursor < SDD_ARTIFACTS.length - 1) cursor++;
+        repaint();
+        return;
+      }
+      // Space — toggle
+      if (key === " ") {
+        const artifact = SDD_ARTIFACTS[cursor];
+        if (artifact.required) return;
+        if (selected.has(artifact.name)) {
+          selected.delete(artifact.name);
+        } else {
+          selected.add(artifact.name);
+        }
+        repaint();
+        return;
+      }
+      // Enter — confirm
+      if (key === "\r") {
+        finish();
+        return;
+      }
+      // A — add custom
+      if (key === "a" || key === "A") {
+        // Print input prompts below the UI
+        process.stdout.write(`\n  Artifact name: `);
+        addBuffer = "";
+        mode = "add-name";
+        return;
+      }
+      // M — move/reorder
+      if (key === "m" || key === "M") {
+        const artifact = SDD_ARTIFACTS[cursor];
+        if (artifact.required) return; // Can't move required artifacts
+        mode = "reorder";
+        repaint();
+        return;
       }
     }
-    display();
-  }
 
-  // Return chain and custom artifacts info
-  const chain = SDD_ARTIFACTS.filter((a) => selected.has(a.name)).map((a) => a.name);
-  return { chain, customArtifacts };
-}
-
-async function reorderChain(selected) {
-  const optional = SDD_ARTIFACTS.filter(
-    (a) => selected.has(a.name) && !a.required
-  );
-
-  if (optional.length === 0) {
-    console.log("  No optional artifacts to reorder.");
-    return;
-  }
-
-  console.log("\n  Current optional artifact positions:");
-  optional.forEach((a, i) => {
-    const globalIdx = SDD_ARTIFACTS.indexOf(a);
-    console.log(`    ${i + 1}. ${a.name} (position ${globalIdx + 1})`);
+    stdin.on("data", onKey);
   });
-
-  const input = await ask(
-    "\n  New order (e.g. 2,1,3) or Enter to keep: "
-  );
-  if (input === "") return;
-
-  const indices = input.split(",").map((s) => parseInt(s.trim(), 10) - 1);
-  if (
-    indices.length !== optional.length ||
-    indices.some((i) => isNaN(i) || i < 0 || i >= optional.length)
-  ) {
-    console.log("  Invalid order. Keeping current.");
-    return;
-  }
-
-  // Check no duplicates
-  if (new Set(indices).size !== indices.length) {
-    console.log("  Duplicate positions. Keeping current.");
-    return;
-  }
-
-  const reordered = indices.map((i) => optional[i]);
-
-  // Remove old optional artifacts from SDD_ARTIFACTS and re-insert in new order
-  // Find insertion point (after last required artifact)
-  const lastRequiredIdx = SDD_ARTIFACTS.reduce((max, a, i) =>
-    a.required ? i : max, 0
-  );
-
-  // Remove all optional that are selected
-  const optNames = new Set(optional.map((a) => a.name));
-  const remaining = SDD_ARTIFACTS.filter((a) => !optNames.has(a.name));
-
-  // Re-insert after required artifacts
-  const insertAt = remaining.reduce((max, a, i) =>
-    a.required ? i : max, 0
-  ) + 1;
-  remaining.splice(insertAt, 0, ...reordered);
-
-  // Replace SDD_ARTIFACTS contents in-place
-  SDD_ARTIFACTS.length = 0;
-  SDD_ARTIFACTS.push(...remaining);
-
-  console.log("  Reordered.");
 }
 
 // ── init ──────────────────────────────────────────────
