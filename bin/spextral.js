@@ -238,9 +238,11 @@ async function askFeatures() {
   );
   const customArtifacts = {};
   let cursor = 0;
+  let lastLineCount = 0;
 
   // Initial render
   const output = renderFeatures(cursor, selected, "select");
+  lastLineCount = output.split("\n").length;
   process.stdout.write(output);
 
   return new Promise((resolve) => {
@@ -256,11 +258,10 @@ async function askFeatures() {
     let movingIdx = -1;
 
     function repaint() {
-      // Clear previous output and redraw
+      // Move up by the number of lines from the PREVIOUS render, then clear
+      process.stdout.write(`\x1b[${lastLineCount}A\x1b[J`);
       const text = renderFeatures(cursor, selected, mode);
-      const lineCount = text.split("\n").length;
-      // Move up and clear
-      process.stdout.write(`\x1b[${lineCount}A\x1b[J`);
+      lastLineCount = text.split("\n").length;
       process.stdout.write(text);
     }
 
