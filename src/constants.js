@@ -200,6 +200,7 @@ const SDD_SKILLS = {
       "TRIGGER when: user wants to start a new feature, build something new, add functionality, or says 'nueva feature', 'new feature', 'quiero añadir', 'let\\'s build', 'next task', 'SDD_WAKE'. Activates the SDD spec-driven development protocol and discovers project state.",
     prompt:
       "Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity using .sdd/config.json, perform capabilities handshake, and report status with a suggested next action.\n\nIMPORTANT — Auto-Continuation Rule: After completing implementation, you MUST continue through the ENTIRE artifact chain without stopping. Run `spextral next` after each artifact and execute the suggested action until STATUS is `all_complete`. This includes custom artifacts — read their description from config.custom_artifacts and execute them (applying code changes if needed, then generating the artifact .md file). Do NOT consider a feature done until every artifact in the chain is generated and validated.",
+    embedProtocol: true,
   },
   "sdd-next": {
     description:

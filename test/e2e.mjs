@@ -28,9 +28,25 @@ function setupTestProject() {
   fs.mkdirSync(tmpBase, { recursive: true });
   const tmpDir = fs.mkdtempSync(path.join(tmpBase, "e2e-"));
 
-  // Copy spec as CLAUDE.md
+  // Use bootstrap for CLAUDE.md (protocol lives in the skill)
+  const bootstrapContent = fs.readFileSync(path.join(TEMPLATES_DIR, "bootstrap.md"), "utf-8");
+  fs.writeFileSync(path.join(tmpDir, "CLAUDE.md"), bootstrapContent);
+
+  // Create sdd-wake skill with full protocol embedded
   const specContent = fs.readFileSync(path.join(TEMPLATES_DIR, "spextral.md"), "utf-8");
-  fs.writeFileSync(path.join(tmpDir, "CLAUDE.md"), specContent);
+  const skillDir = path.join(tmpDir, ".claude", "skills", "sdd-wake");
+  fs.mkdirSync(skillDir, { recursive: true });
+  const skillBody = `Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity using .sdd/config.json, perform capabilities handshake, and report status with a suggested next action.
+
+IMPORTANT — Auto-Continuation Rule: After completing implementation, you MUST continue through the ENTIRE artifact chain without stopping. Run \`spextral next\` after each artifact and execute the suggested action until STATUS is \`all_complete\`. This includes custom artifacts — read their description from config.custom_artifacts and execute them (applying code changes if needed, then generating the artifact .md file). Do NOT consider a feature done until every artifact in the chain is generated and validated.
+
+---
+
+${specContent}`;
+  fs.writeFileSync(
+    path.join(skillDir, "SKILL.md"),
+    `---\nname: sdd-wake\ndescription: Activates the SDD spec-driven development protocol and discovers project state.\n---\n\n${skillBody}\n`
+  );
 
   // Create .sdd/ structure
   fs.mkdirSync(path.join(tmpDir, ".sdd", "archive"), { recursive: true });

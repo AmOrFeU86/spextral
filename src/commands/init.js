@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { TEMPLATES_DIR, SPEC_SOURCE, AGENT_REGISTRY, SDD_SKILLS } = require("../constants");
+const BOOTSTRAP_SOURCE = path.join(TEMPLATES_DIR, "bootstrap.md");
 const { ensureDir, appendIfMissing, ask } = require("../utils");
 const { interactiveCheckbox } = require("../ui/checkbox");
 const { askArtifacts } = require("../ui/artifact-picker");
@@ -23,16 +24,22 @@ inclusion: always
 ${content}`;
 }
 
-function generateNativeSkills(agent) {
+function generateNativeSkills(agent, specContent) {
   if (!agent.skills) return;
 
   for (const [name, skill] of Object.entries(SDD_SKILLS)) {
     const skillDir = path.join(agent.skills.dir, name);
     const skillPath = path.join(skillDir, "SKILL.md");
     ensureDir(skillDir);
+
+    let body = skill.prompt;
+    if (skill.embedProtocol) {
+      body = `${skill.prompt}\n\n---\n\n${specContent}`;
+    }
+
     fs.writeFileSync(
       skillPath,
-      `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${skill.prompt}\n`
+      `---\nname: ${name}\ndescription: ${skill.description}\n---\n\n${body}\n`
     );
     console.log(`    Skill: ${skillPath}`);
   }
@@ -62,6 +69,7 @@ async function cmdInit() {
   const selected = selectedKeys.map((key) => [key, AGENT_REGISTRY[key]]);
 
   const specContent = fs.readFileSync(SPEC_SOURCE, "utf-8");
+  const bootstrapContent = fs.readFileSync(BOOTSTRAP_SOURCE, "utf-8");
   const writtenDests = new Set();
 
   for (const [agentKey, agent] of selected) {
@@ -70,14 +78,15 @@ async function cmdInit() {
     if (agent.dest && !writtenDests.has(agent.dest)) {
       writtenDests.add(agent.dest);
       const destPath = path.resolve(agent.dest);
-      let content = specContent;
-      if (agent.mdcFormat) content = wrapMdc(specContent);
-      else if (agent.kiroSteering) content = wrapKiroSteering(specContent);
+      // Use bootstrap for platforms with skills (protocol lives in sdd-wake skill)
+      let content = agent.skills ? bootstrapContent : specContent;
+      if (agent.mdcFormat) content = wrapMdc(content);
+      else if (agent.kiroSteering) content = wrapKiroSteering(content);
 
       ensureDir(path.dirname(destPath));
       if (agent.isFile && fs.existsSync(destPath)) {
         const existing = fs.readFileSync(destPath, "utf-8");
-        if (!existing.includes("sdd_version")) {
+        if (!existing.includes("sdd_version") && !existing.includes("Spextral")) {
           fs.writeFileSync(destPath, existing + "\n\n" + content);
           console.log(`    Appended to ${agent.dest}`);
         } else {
@@ -97,7 +106,7 @@ async function cmdInit() {
       console.log(`    Updated ${agent.exclusionFile}`);
     }
 
-    generateNativeSkills(agent);
+    generateNativeSkills(agent, specContent);
   }
 
   const { chain, customArtifacts } = await askArtifacts();

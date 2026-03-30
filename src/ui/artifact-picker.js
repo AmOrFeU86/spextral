@@ -125,6 +125,7 @@ function askArtifacts() {
     let mode = "select";
     let addBuffer = "";
     let addName = "";
+    let addDesc = "";
 
     function repaint() {
       process.stdout.write(`\x1b[${lastLineCount - 1}A\x1b[J`);
@@ -174,14 +175,34 @@ function askArtifacts() {
       if (mode === "add-desc") {
         if (key === "\x1b") { mode = "select"; repaint(); return; }
         if (key === "\r") {
-          const desc = addBuffer || "Custom artifact";
-          const artifact = { name: addName, required: false, description: desc, custom: true };
+          addDesc = addBuffer || "Custom artifact";
+          addBuffer = ""; mode = "add-prompt";
+          process.stdout.write(`\x1b[2K\r  Prompt (optional, Enter to skip): `);
+          return;
+        }
+        if (key === "\x7f" || key === "\b") {
+          addBuffer = addBuffer.slice(0, -1);
+          process.stdout.write(`\x1b[2K\r  Description: ${addBuffer}`);
+          return;
+        }
+        if (key.length === 1 && key >= " ") { addBuffer += key; process.stdout.write(key); }
+        return;
+      }
+
+      // ── Add custom artifact: prompt input ──
+      if (mode === "add-prompt") {
+        if (key === "\x1b") { mode = "select"; repaint(); return; }
+        if (key === "\r") {
+          const prompt = addBuffer || "";
+          const artifact = { name: addName, required: false, description: addDesc, custom: true };
           SDD_ARTIFACTS.push(artifact);
           selected.add(addName);
-          customArtifacts[addName] = { description: desc };
+          const entry = { description: addDesc };
+          if (prompt) entry.prompt = prompt;
+          customArtifacts[addName] = entry;
           cursor = SDD_ARTIFACTS.length - 1;
           addBuffer = ""; mode = "select";
-          process.stdout.write(`\x1b[2A\x1b[J`);
+          process.stdout.write(`\x1b[3A\x1b[J`);
           const text = render(mode);
           lastLineCount = text.split("\n").length;
           process.stdout.write(text);
@@ -189,7 +210,7 @@ function askArtifacts() {
         }
         if (key === "\x7f" || key === "\b") {
           addBuffer = addBuffer.slice(0, -1);
-          process.stdout.write(`\x1b[2K\r  Description: ${addBuffer}`);
+          process.stdout.write(`\x1b[2K\r  Prompt (optional, Enter to skip): ${addBuffer}`);
           return;
         }
         if (key.length === 1 && key >= " ") { addBuffer += key; process.stdout.write(key); }

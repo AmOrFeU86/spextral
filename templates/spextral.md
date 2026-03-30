@@ -215,14 +215,17 @@ The artifact chain is defined in `.sdd/config.json` as the single source of trut
 {
   "chain": ["SPEC", "PLAN", "PROGRESS", "GDPR", "TEST", "SECURITY"],
   "custom_artifacts": {
-    "GDPR": { "description": "GDPR compliance analysis and data processing inventory" }
+    "GDPR": {
+      "description": "GDPR compliance analysis and data processing inventory",
+      "prompt": "Analyze all data flows in the implemented code. For each personal data field: identify source, processing purpose, legal basis, retention period, and third-party transfers. Flag any processing without explicit consent."
+    }
   }
 }
 ```
 
 - **Required artifacts** (SPEC, PLAN) are always present and cannot be removed.
 - **Optional artifacts** (PROGRESS, VALIDATION, CHECKPOINT, REVIEW, TEST, SECURITY) are included based on user selection during init.
-- **Custom artifacts** can be added during init for domain-specific needs (e.g. GDPR, DEPLOYMENT, MIGRATION). Their description is stored in `custom_artifacts` so agents know what to generate.
+- **Custom artifacts** can be added during init for domain-specific needs (e.g. GDPR, DEPLOYMENT, MIGRATION). Each custom artifact has a `description` (what it is) and an optional `prompt` (specific instructions the agent MUST follow when generating it). If `prompt` is present, the agent uses it as the primary directive; otherwise, it generates based on the description alone.
 - The chain order determines the routing logic for `spextral next` and the handoff sequence between artifacts.
 - Agents MUST read `.sdd/config.json` to determine the next artifact in the chain instead of relying on frontmatter fields.
 
