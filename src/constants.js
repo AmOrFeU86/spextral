@@ -108,7 +108,7 @@ const SDD_ARTIFACTS = [
     name: "SPEC",
     category: "core",
     required: true,
-    shortDesc: "🌍 The Big Picture & Strict Rules",
+    shortDesc: "Context, decisions & requirements",
     description: "Context, decisions, and requirements (EARS format, REQ-N IDs)",
     details: {
       beginner: "This tells the AI what your project is about AND what it needs to do. Example: 'This is an online shoe store using Tailwind CSS. The user must be able to log in with Google.' All context, decisions, and requirements live here so the AI has a single source of truth.",
@@ -119,7 +119,7 @@ const SDD_ARTIFACTS = [
     name: "PLAN",
     category: "core",
     required: true,
-    shortDesc: "🗺️ The Roadmap",
+    shortDesc: "Task roadmap with dependency graph",
     description: "Tasks with dependency graph",
     details: {
       beginner: "A checklist that breaks a big feature into small, manageable steps (e.g., 1. Setup database → 2. Build API → 3. Create UI). It stops the AI from trying to code everything all at once and getting confused.",
@@ -130,7 +130,7 @@ const SDD_ARTIFACTS = [
     name: "PROGRESS",
     category: "execution",
     required: false,
-    shortDesc: "💾 The Save State",
+    shortDesc: "Execution status tracking",
     description: "Execution status tracking",
     details: {
       beginner: "If you run out of AI credits or the chat window resets, this file acts as a save point. When you come back, the AI reads this file to remember exactly which task it was working on so it can resume perfectly.",
@@ -141,7 +141,7 @@ const SDD_ARTIFACTS = [
     name: "CHECKPOINT",
     category: "execution",
     required: false,
-    shortDesc: "⏪ The Time Machine",
+    shortDesc: "Recovery snapshots",
     description: "Recovery points",
     details: {
       beginner: "A fast backup taken right before the AI makes a massive or risky change to your files. If the AI breaks everything, this file helps you quickly undo the mess.",
@@ -152,7 +152,7 @@ const SDD_ARTIFACTS = [
     name: "VALIDATION",
     category: "quality",
     required: false,
-    shortDesc: "🔍 The Checker",
+    shortDesc: "Validation report",
     description: "Validation report",
     details: {
       beginner: "A final report where the AI double-checks if every single rule from SPEC.md was actually built and if it works as requested before calling the job 'done'.",
@@ -163,7 +163,7 @@ const SDD_ARTIFACTS = [
     name: "REVIEW",
     category: "quality",
     required: false,
-    shortDesc: "🧐 The Critic",
+    shortDesc: "Devil-advocate code review",
     description: "Review notes (Devil-Advocate)",
     details: {
       beginner: "Tells the AI to act like a strict senior programmer, looking for messy code, bad practices, or things that might run slowly in the future.",
@@ -174,7 +174,7 @@ const SDD_ARTIFACTS = [
     name: "TEST",
     category: "quality",
     required: false,
-    shortDesc: "🧪 The Lab",
+    shortDesc: "Auto-generated unit tests",
     description: "Test artifacts and results",
     details: {
       beginner: "Holds the instructions for automated tests. The AI writes code to test its own code, ensuring that fixing one thing today doesn't break another thing tomorrow.",
@@ -185,7 +185,7 @@ const SDD_ARTIFACTS = [
     name: "SECURITY",
     category: "quality",
     required: false,
-    shortDesc: "🛡️ The Bouncer",
+    shortDesc: "OWASP security audit",
     description: "Security analysis",
     details: {
       beginner: "A security scan where the AI looks for places hackers could attack your app, like weak passwords, data leaks, or exposed database links.",

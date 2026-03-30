@@ -83,7 +83,7 @@ function askArtifacts() {
 
       lines.push(`  ${v}${" ".repeat(innerWidth)}${v}`);
 
-      const beginnerLabel = "\ud83d\udc68\u200d\ud83d\udcbb For beginners:";
+      const beginnerLabel = "For beginners:";
       lines.push(`  ${v} ${c.label}${beginnerLabel}${c.reset}${padLine(" " + beginnerLabel, innerWidth)}${v}`);
       const beginnerLines = wrapText(artifact.details.beginner, innerWidth - 2);
       beginnerLines.forEach(line => {
@@ -92,7 +92,7 @@ function askArtifacts() {
 
       lines.push(`  ${v}${" ".repeat(innerWidth)}${v}`);
 
-      const expertLabel = "\ud83e\udde0 For experts:";
+      const expertLabel = "For experts:";
       lines.push(`  ${v} ${c.label}${expertLabel}${c.reset}${padLine(" " + expertLabel, innerWidth)}${v}`);
       const expertLines = wrapText(artifact.details.expert, innerWidth - 2);
       expertLines.forEach(line => {
