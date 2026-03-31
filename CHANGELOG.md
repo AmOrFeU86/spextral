@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.9.1] - 2026-03-31
+
+### Fixed
+- **YAML frontmatter escaping**: Properly quote description field in SKILL.md files to handle colons correctly (fixes pi skill loading errors)
+
 ## [2.9.0] - 2026-03-31
 
 ### Added
