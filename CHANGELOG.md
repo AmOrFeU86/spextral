@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.9.3] - 2026-03-31
+
+### Fixed
+- **YAML single quotes**: Remove unnecessary escaping of single quotes in double-quoted YAML strings (single quotes are literal in YAML double-quoted strings)
+
 ## [2.9.2] - 2026-03-31
 
 ### Fixed
