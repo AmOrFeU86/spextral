@@ -27,7 +27,7 @@ function generateNativeSkills(agent) {
 
     fs.writeFileSync(
       skillPath,
-      `---\nname: ${name}\ndescription: "${skill.description.replace(/"/g, '\\"')}"\n---\n\n${body}\n`
+      `---\nname: ${name}\ndescription: "${skill.description.replace(/"/g, '\\"').replace(/\\'/g, "'")}"\n---\n\n${body}\n`
     );
     console.log(`    Skill: ${skillPath}`);
   }

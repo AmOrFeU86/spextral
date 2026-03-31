@@ -1,6 +1,6 @@
 {
   "name": "spextral",
-  "version": "2.9.3",
+  "version": "2.9.4",
   "description": "Spec-Driven Development protocol for AI agents. One command to govern them all.",
   "license": "MIT",
   "bin": {
