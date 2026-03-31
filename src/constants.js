@@ -3,6 +3,7 @@ const path = require("path");
 const SPEC_FILENAME = "spextral.md";
 const TEMPLATES_DIR = path.join(__dirname, "..", "templates");
 const SPEC_SOURCE = path.join(TEMPLATES_DIR, SPEC_FILENAME);
+const SKILLS_DIR = path.join(TEMPLATES_DIR, "skills");
 
 const VALID_STATES = [
   "draft",
@@ -24,14 +25,6 @@ const AGENT_REGISTRY = {
     skills: { dir: path.join(".claude", "skills"), format: "skill" },
     exclusionFile: null,
   },
-  cursor: {
-    name: "Cursor",
-    dest: path.join(".cursor", "rules", "spextral.mdc"),
-    isFile: true,
-    mdcFormat: true,
-    skills: null,
-    exclusionFile: ".cursorignore",
-  },
   copilot: {
     name: "GitHub Copilot",
     dest: path.join(".github", "copilot-instructions.md"),
@@ -45,54 +38,6 @@ const AGENT_REGISTRY = {
     isFile: false,
     kiroSteering: true,
     skills: { dir: path.join(".kiro", "skills"), format: "skill-dir" },
-    exclusionFile: null,
-  },
-  "roo-code": {
-    name: "Roo Code",
-    dest: ".clinerules",
-    isFile: true,
-    skills: null,
-    exclusionFile: null,
-  },
-  windsurf: {
-    name: "Windsurf",
-    dest: path.join(".windsurf", "rules", "spextral.md"),
-    isFile: false,
-    skills: null,
-    exclusionFile: null,
-  },
-  "gemini-cli": {
-    name: "Gemini CLI",
-    dest: "GEMINI.md",
-    isFile: true,
-    skills: null,
-    exclusionFile: null,
-  },
-  cline: {
-    name: "Cline",
-    dest: path.join(".cline", "rules", "spextral.md"),
-    isFile: false,
-    skills: null,
-    exclusionFile: null,
-  },
-  codex: {
-    name: "Codex CLI",
-    dest: "AGENTS.md",
-    isFile: true,
-    skills: null,
-    exclusionFile: null,
-  },
-  trae: {
-    name: "Trae",
-    dest: path.join(".trae", "rules", "spextral.md"),
-    isFile: false,
-    skills: null,
-    exclusionFile: null,
-  },
-  manual: {
-    name: "Manual (copy to templates/ only)",
-    dest: null,
-    skills: null,
     exclusionFile: null,
   },
 };
@@ -198,21 +143,47 @@ const SDD_SKILLS = {
   "sdd-wake": {
     description:
       "TRIGGER when: user wants to start a new feature, build something new, add functionality, or says 'nueva feature', 'new feature', 'quiero añadir', 'let\\'s build', 'next task', 'SDD_WAKE'. Activates the SDD spec-driven development protocol and discovers project state.",
-    prompt:
-      "Run the SDD_WAKE protocol. Discover the .sdd/ directory, read artifact frontmatters, check chain integrity using .sdd/config.json, perform capabilities handshake, and report status with a suggested next action.\n\nIMPORTANT — Auto-Continuation Rule: After completing implementation, you MUST continue through the ENTIRE artifact chain without stopping. Run `spextral next` after each artifact and execute the suggested action until STATUS is `all_complete`. This includes custom artifacts — read their description from config.custom_artifacts and execute them (applying code changes if needed, then generating the artifact .md file). Do NOT consider a feature done until every artifact in the chain is generated and validated.",
-    embedProtocol: true,
+    templateFile: "sdd-wake.md",
+  },
+  "sdd-spec": {
+    description:
+      "TRIGGER when: user needs to create or edit a SPEC, define requirements, add decisions, or says 'create spec', 'define requirements', 'SDD_SPEC'. Creates a SPEC.md artifact.",
+    templateFile: "sdd-spec.md",
+  },
+  "sdd-plan": {
+    description:
+      "TRIGGER when: user needs to create a PLAN, define tasks, map dependencies, or says 'create plan', 'plan tasks', 'SDD_PLAN'. Creates a PLAN.md artifact.",
+    templateFile: "sdd-plan.md",
+  },
+  "sdd-implement": {
+    description:
+      "TRIGGER when: user wants to start coding, implement tasks, execute the plan, or says 'implement', 'start coding', 'SDD_IMPLEMENT'. Executes tasks from PLAN.md.",
+    templateFile: "sdd-implement.md",
+  },
+  "sdd-review": {
+    description:
+      "TRIGGER when: user wants a devil-advocate review, code critique, or says 'review', 'devil advocate', 'SDD_REVIEW'. Analyzes SPEC and PLAN for issues.",
+    templateFile: "sdd-review.md",
+  },
+  "sdd-test": {
+    description:
+      "TRIGGER when: user wants to generate tests, run testing, or says 'test', 'generate tests', 'SDD_TEST'. Generates and executes unit tests.",
+    templateFile: "sdd-test.md",
+  },
+  "sdd-security": {
+    description:
+      "TRIGGER when: user wants a security audit, vulnerability check, or says 'security', 'audit', 'SDD_SECURITY'. Performs static security analysis.",
+    templateFile: "sdd-security.md",
   },
   "sdd-next": {
     description:
       "TRIGGER when: user asks what to do next, wants to continue work, or says 'next step', 'what now', 'siguiente paso'. Determines the next step in the SDD workflow.",
-    prompt:
-      "Analyze the current .sdd/ artifacts and their statuses to determine the next logical step in the SDD workflow. Report the current state, dependency order if applicable, and the recommended action.",
+    templateFile: "sdd-next.md",
   },
   "sdd-status": {
     description:
       "TRIGGER when: user asks about project status, progress, or says 'how is it going', 'status', 'como va'. Shows current SDD project status and progress.",
-    prompt:
-      "Run SDD_STATUS. For each project slug in .sdd/, report: artifact states, progress percentage (completed/total tasks), any blocking issues, and current capabilities.",
+    templateFile: "sdd-status.md",
   },
 };
 
@@ -220,6 +191,7 @@ module.exports = {
   SPEC_FILENAME,
   TEMPLATES_DIR,
   SPEC_SOURCE,
+  SKILLS_DIR,
   VALID_STATES,
   AGENT_REGISTRY,
   SDD_CATEGORIES,

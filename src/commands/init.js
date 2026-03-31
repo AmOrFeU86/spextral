@@ -1,20 +1,10 @@
 const fs = require("fs");
 const path = require("path");
-const { TEMPLATES_DIR, SPEC_SOURCE, AGENT_REGISTRY, SDD_SKILLS } = require("../constants");
+const { TEMPLATES_DIR, SKILLS_DIR, AGENT_REGISTRY, SDD_SKILLS } = require("../constants");
 const BOOTSTRAP_SOURCE = path.join(TEMPLATES_DIR, "bootstrap.md");
 const { ensureDir, appendIfMissing, ask } = require("../utils");
 const { interactiveCheckbox } = require("../ui/checkbox");
 const { askArtifacts } = require("../ui/artifact-picker");
-
-function wrapMdc(content) {
-  return `---
-description: Spextral SDD Protocol
-globs:
-alwaysApply: true
----
-
-${content}`;
-}
 
 function wrapKiroSteering(content) {
   return `---
@@ -24,7 +14,7 @@ inclusion: always
 ${content}`;
 }
 
-function generateNativeSkills(agent, specContent) {
+function generateNativeSkills(agent) {
   if (!agent.skills) return;
 
   for (const [name, skill] of Object.entries(SDD_SKILLS)) {
@@ -32,10 +22,8 @@ function generateNativeSkills(agent, specContent) {
     const skillPath = path.join(skillDir, "SKILL.md");
     ensureDir(skillDir);
 
-    let body = skill.prompt;
-    if (skill.embedProtocol) {
-      body = `${skill.prompt}\n\n---\n\n${specContent}`;
-    }
+    const templatePath = path.join(SKILLS_DIR, skill.templateFile);
+    const body = fs.readFileSync(templatePath, "utf-8");
 
     fs.writeFileSync(
       skillPath,
@@ -46,7 +34,7 @@ function generateNativeSkills(agent, specContent) {
 }
 
 async function cmdInit() {
-  const choices = Object.entries(AGENT_REGISTRY).filter(([k]) => k !== "manual");
+  const choices = Object.entries(AGENT_REGISTRY);
   const platformItems = choices.map(([key, val]) => ({
     key,
     label: val.name,
@@ -68,7 +56,6 @@ async function cmdInit() {
 
   const selected = selectedKeys.map((key) => [key, AGENT_REGISTRY[key]]);
 
-  const specContent = fs.readFileSync(SPEC_SOURCE, "utf-8");
   const bootstrapContent = fs.readFileSync(BOOTSTRAP_SOURCE, "utf-8");
   const writtenDests = new Set();
 
@@ -78,10 +65,8 @@ async function cmdInit() {
     if (agent.dest && !writtenDests.has(agent.dest)) {
       writtenDests.add(agent.dest);
       const destPath = path.resolve(agent.dest);
-      // Use bootstrap for platforms with skills (protocol lives in sdd-wake skill)
-      let content = agent.skills ? bootstrapContent : specContent;
-      if (agent.mdcFormat) content = wrapMdc(content);
-      else if (agent.kiroSteering) content = wrapKiroSteering(content);
+      let content = bootstrapContent;
+      if (agent.kiroSteering) content = wrapKiroSteering(content);
 
       ensureDir(path.dirname(destPath));
       if (agent.isFile && fs.existsSync(destPath)) {
@@ -97,8 +82,6 @@ async function cmdInit() {
         fs.writeFileSync(destPath, content);
         console.log(`    Created ${agent.dest}`);
       }
-    } else if (!agent.dest) {
-      console.log("    Manual mode — spec available at templates/spextral.md in the package.");
     }
 
     if (agent.exclusionFile) {
@@ -106,7 +89,7 @@ async function cmdInit() {
       console.log(`    Updated ${agent.exclusionFile}`);
     }
 
-    generateNativeSkills(agent, specContent);
+    generateNativeSkills(agent);
   }
 
   const { chain, customArtifacts } = await askArtifacts();

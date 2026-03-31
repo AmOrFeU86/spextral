@@ -23,29 +23,15 @@ Framework SDD agnostico basado en instrucciones portables con artefactos version
 | Platform | FileWrite | SubagentSpawn | CommandExec | ContextMemory | Native Skills |
 |----------|-----------|---------------|-------------|---------------|---------------|
 | Claude Code | Yes | Yes | Yes | Yes | Yes |
-| Cursor | Yes | No | No | Partial | No |
 | GitHub Copilot | Yes | No | No | Partial | Yes |
 | Kiro | Yes | No | No | Partial | Yes |
-| Roo Code | Yes | No | Yes | Partial | No |
-| Windsurf | Yes | No | No | Partial | No |
-| Gemini CLI | Yes | No | Yes | Partial | No |
-| Cline | Yes | No | Yes | Partial | No |
-| Codex CLI | Yes | Yes | Yes | Yes | No |
-| Trae | Yes | No | No | Partial | No |
 
 ### Installation
 
 Run `npx spextral init` to auto-install for one or more agents, or copy this file manually:
 - **Claude Code:** `CLAUDE.md` (+ skills in `.claude/skills/`)
-- **Cursor:** `.cursor/rules/spextral.mdc`
 - **GitHub Copilot:** `.github/copilot-instructions.md` (+ skills in `.github/skills/`)
 - **Kiro:** `.kiro/steering/spextral.md` (+ skills in `.kiro/skills/`)
-- **Roo Code:** `.clinerules`
-- **Windsurf:** `.windsurf/rules/spextral.md`
-- **Gemini CLI:** `GEMINI.md`
-- **Cline:** `.cline/rules/spextral.md`
-- **Codex CLI:** `AGENTS.md`
-- **Trae:** `.trae/rules/spextral.md`
 - Or set `SDD_ROOT` environment variable for monorepos.
 
 Multiple agents can coexist in the same project — each reads the protocol from its own path while sharing the `.sdd/` directory as the single source of truth.
@@ -129,9 +115,10 @@ $$ \text{Percentage} = \left( \frac{\text{Completed Tasks}}{\text{Total Tasks}} 
 
 | Platform | Trigger Type | Command / Text |
 |----------|-------------|----------------|
-| Claude Code | Slash command | `/sdd-spec` |
-| Cursor | Chat rule | `!sdd-spec` |
-| CLI / Web | Handshake | `SDD_WAKE` / `SDD_STATUS` / `SDD_RESTORE` |
+| Claude Code | Skill | `sdd-wake`, `sdd-spec`, `sdd-plan`, etc. |
+| GitHub Copilot | Skill | `sdd-wake`, `sdd-spec`, `sdd-plan`, etc. |
+| Kiro | Skill | `sdd-wake`, `sdd-spec`, `sdd-plan`, etc. |
+| Any platform | Handshake | `SDD_WAKE` / `SDD_STATUS` / `SDD_RESTORE` |
 
 ### Standardized Human Response Commands (Human → Agent)
 
@@ -259,14 +246,19 @@ Every `SPEC.md` MUST include a `## Decisions` section. Each decision is tagged w
   1. Create `.sdd/` and `.sdd/archive/` structure.
   2. Generate seed artifacts: `{slug}/SPEC.md` (empty template with Context, Decisions, and Requirements sections).
   3. **Create exclusion rules for IDEs** that auto-vectorize or index the workspace:
-     - `.cursorignore`: add `.sdd/archive/**` (Cursor)
      - `.copilotignore`: add `.sdd/archive/**` (GitHub Copilot)
      - If these files already exist, append the rule without overwriting.
   4. **Generate native skills** for agents that support them (Claude Code, Copilot, Kiro):
      - `sdd-wake`: Activates the SDD protocol and runs discovery.
+     - `sdd-spec`: Creates SPEC.md with context, decisions, and requirements.
+     - `sdd-plan`: Creates PLAN.md with task mapping and dependencies.
+     - `sdd-implement`: Executes tasks with autonomy and checkpointing.
+     - `sdd-review`: Devil-advocate analysis of SPEC and PLAN.
+     - `sdd-test`: Generates and executes unit tests.
+     - `sdd-security`: Static security audit with OWASP mapping.
      - `sdd-next`: Determines the next workflow step.
      - `sdd-status`: Reports current project progress.
-  5. This ensures lazy loading is respected and agents have convenient shortcuts for common SDD operations.
+  5. This ensures lazy loading is respected — only the relevant skill is loaded into context when needed, instead of the entire protocol.
 
 ### Frontmatter (Required vs Optional Fields)
 

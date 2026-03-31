@@ -28,13 +28,11 @@ init → SDD_WAKE → spec → clarify → validate → review → plan → clar
 
 ## Compatibility
 
-| Platform | FileWrite | SubagentSpawn | CommandExec | ContextMemory |
-|----------|-----------|---------------|-------------|---------------|
-| Claude Code | Yes | Yes | Yes | Yes |
-| Cursor | Yes | No | No | Partial |
-| GitHub Copilot | Yes | No | No | Partial |
-| Roo Code | Yes | No | Yes | Partial |
-| Kiro | Yes | No | No | Partial |
+| Platform | FileWrite | SubagentSpawn | CommandExec | ContextMemory | Native Skills |
+|----------|-----------|---------------|-------------|---------------|---------------|
+| Claude Code | Yes | Yes | Yes | Yes | Yes |
+| GitHub Copilot | Yes | No | No | Partial | Yes |
+| Kiro | Yes | No | No | Partial | Yes |
 
 ## CLI Commands
 
@@ -45,12 +43,10 @@ Interactive setup. Asks which IDE you use and copies the protocol spec to the ri
 | IDE | Destination |
 |-----|-------------|
 | Claude Code | `.claude/skills/spextral.md` |
-| Cursor | `.cursorrules` |
 | GitHub Copilot | `.github/copilot/spextral.md` |
-| Roo Code | `.clinerules` |
-| Manual | Copy from `templates/` yourself |
+| Kiro | `.kiro/skills/spextral.md` |
 
-Also creates `.sdd/`, `.sdd/archive/`, and IDE exclusion files (`.cursorignore`, `.copilotignore`).
+Also creates `.sdd/` and `.sdd/archive/`.
 
 ### `spextral doctor`
 
