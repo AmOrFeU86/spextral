@@ -33,6 +33,7 @@ init → SDD_WAKE → spec → clarify → validate → review → plan → clar
 | Claude Code | Yes | Yes | Yes | Yes | Yes |
 | GitHub Copilot | Yes | No | No | Partial | Yes |
 | Kiro | Yes | No | No | Partial | Yes |
+| Pi Coding Agent | Yes | No | Yes | Yes | Yes |
 
 ## CLI Commands
 
@@ -45,6 +46,7 @@ Interactive setup. Asks which IDE you use and copies the protocol spec to the ri
 | Claude Code | `.claude/skills/spextral.md` |
 | GitHub Copilot | `.github/copilot/spextral.md` |
 | Kiro | `.kiro/skills/spextral.md` |
+| Pi | `.pi/skills/spextral.md` |
 
 Also creates `.sdd/` and `.sdd/archive/`.
 

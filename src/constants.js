@@ -40,6 +40,13 @@ const AGENT_REGISTRY = {
     skills: { dir: path.join(".kiro", "skills"), format: "skill-dir" },
     exclusionFile: null,
   },
+  pi: {
+    name: "Pi Coding Agent",
+    dest: path.join(".pi", "spextral.md"),
+    isFile: false,
+    skills: { dir: path.join(".pi", "skills"), format: "skill-dir" },
+    exclusionFile: null,
+  },
 };
 
 const SDD_CATEGORIES = [
